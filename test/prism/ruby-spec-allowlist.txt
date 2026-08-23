@@ -1,0 +1,9 @@
+# Tab-separated ruby/spec path and reason. Entries must continue to fail or the
+# conformance test reports them as stale.
+core/enumerable/inject_spec.rb	Existing whole-file recovery; minimize after the initial gate is established.
+core/proc/parameters_spec.rb	Lambda keyword parameter syntax (`-> x: { }`) is not parsed cleanly.
+core/proc/ruby2_keywords_spec.rb	Lambda post-rest and keyword parameter combinations are not parsed cleanly.
+core/range/reverse_each_spec.rb	A range whose endpoints are empty regular expressions is misparsed.
+language/lambda_spec.rb	Lambda default arguments that call a same-named method are misparsed.
+language/method_spec.rb	Tracked by tree-sitter/tree-sitter-ruby#242: endless method definitions reject command-call bodies.
+language/string_spec.rb	Tracked by tree-sitter/tree-sitter-ruby#295: `=` is not accepted as a percent-string delimiter.
