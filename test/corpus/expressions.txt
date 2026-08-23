@@ -158,6 +158,20 @@ not foo
   (unary
     (identifier)))
 
+=======================
+not as assignment value
+=======================
+
+bool = not true
+
+---
+
+(program
+  (assignment
+    left: (identifier)
+    right: (unary
+      operand: (true))))
+
 ===
 and
 ===
@@ -562,6 +576,30 @@ a..b
     (identifier)
     (identifier)))
 
+================================
+empty regexes as range endpoints
+================================
+
+(//..//)
+(/a/..//)
+(//../z/)
+
+---
+
+(program
+  (parenthesized_statements
+    (range
+      (regex)
+      (regex)))
+  (parenthesized_statements
+    (range
+      (regex (string_content))
+      (regex)))
+  (parenthesized_statements
+    (range
+      (regex)
+      (regex (string_content)))))
+
 ===============
 exclusive range
 ===============
@@ -574,6 +612,39 @@ a...b
   (range
     (identifier)
     (identifier)))
+
+===========================================
+newline after range operator continues range
+===========================================
+
+range = 0..
+range = 1..2
+
+range = (0..)
+range = 1..2
+
+---
+
+(program
+  (assignment
+    left: (identifier)
+    right: (range
+      begin: (integer)
+      end: (assignment
+        left: (identifier)
+        right: (range
+          begin: (integer)
+          end: (integer)))))
+  (assignment
+    left: (identifier)
+    right: (parenthesized_statements
+      (range
+        begin: (integer))))
+  (assignment
+    left: (identifier)
+    right: (range
+      begin: (integer)
+      end: (integer))))
 
 ==========
 boolean or
@@ -2546,6 +2617,74 @@ render "/foo/bar", params:
             value: (string
               (string_content))))))))
 
+========================================
+multiline keyword argument values
+========================================
+
+foo key:
+  value
+foo key:
+  rescue_value
+foo key:
+  ready!
+foo key:
+  rescue_value!
+foo key:
+  rescue_value?
+foo key:
+  "value"
+foo key:
+  /value/
+
+---
+
+(program
+  (call
+    method: (identifier)
+    arguments: (argument_list
+      (pair
+        key: (hash_key_symbol)
+        value: (identifier))))
+  (call
+    method: (identifier)
+    arguments: (argument_list
+      (pair
+        key: (hash_key_symbol)
+        value: (identifier))))
+  (call
+    method: (identifier)
+    arguments: (argument_list
+      (pair
+        key: (hash_key_symbol)
+        value: (call
+          method: (identifier)))))
+  (call
+    method: (identifier)
+    arguments: (argument_list
+      (pair
+        key: (hash_key_symbol)
+        value: (call
+          method: (identifier)))))
+  (call
+    method: (identifier)
+    arguments: (argument_list
+      (pair
+        key: (hash_key_symbol)
+        value: (call
+          method: (identifier)))))
+  (call
+    method: (identifier)
+    arguments: (argument_list
+      (pair
+        key: (hash_key_symbol)
+        value: (string (string_content)))))
+  (call
+    method: (identifier)
+    arguments: (argument_list
+      (pair
+        key: (hash_key_symbol)
+        value: (regex (string_content))))))
+
 ==============
 empty lambda expression
 ==============
@@ -2881,3 +3020,401 @@ multiline regex
 (program
   (regex
     (string_content)))
+
+========================================
+block ampersand whitespace and operators
+========================================
+
+foo() { boo( & lambda {}) }
+foo() { boo( & ->{}) }
+foo(&bar)
+foo(& bar)
+foo &bar
+foo&bar
+foo & bar
+foo &
+  bar
+a && b
+a&.b
+a &= b
+outer inner & value
+outer inner, &block
+
+---
+
+(program
+  (call
+    (identifier)
+    (argument_list)
+    (block
+      (block_body
+        (call
+          (identifier)
+          (argument_list
+            (block_argument
+              (call
+                (identifier)
+                (block))))))))
+  (call
+    (identifier)
+    (argument_list)
+    (block
+      (block_body
+        (call
+          (identifier)
+          (argument_list
+            (block_argument
+              (lambda
+                (block))))))))
+  (call
+    (identifier)
+    (argument_list
+      (block_argument
+        (identifier))))
+  (call
+    (identifier)
+    (argument_list
+      (block_argument
+        (identifier))))
+  (call
+    (identifier)
+    (argument_list
+      (block_argument
+        (identifier))))
+  (binary
+    (identifier)
+    (identifier))
+  (binary
+    (identifier)
+    (identifier))
+  (binary
+    (identifier)
+    (identifier))
+  (binary
+    (identifier)
+    (identifier))
+  (call
+    (identifier)
+    (identifier))
+  (operator_assignment
+    (identifier)
+    (identifier))
+  (call
+    (identifier)
+    (argument_list
+      (binary
+        (identifier)
+        (identifier))))
+  (call
+    (identifier)
+    (argument_list
+      (identifier)
+      (block_argument
+        (identifier)))))
+
+===================================
+anonymous block argument forwarding
+===================================
+
+def foo(&)
+  foo(a, &
+  )
+end
+
+def foo(x, &)
+  bar x, &
+end
+
+def command_with_space(x, &)
+  target x, & ;
+end
+
+---
+
+(program
+  (method
+    (identifier)
+    (method_parameters
+      (block_parameter))
+    (body_statement
+      (call
+        (identifier)
+        (argument_list
+          (identifier)
+          (block_argument)))))
+  (method
+    (identifier)
+    (method_parameters
+      (identifier)
+      (block_parameter))
+    (body_statement
+      (call
+        (identifier)
+        (argument_list
+          (identifier)
+          (block_argument)))))
+  (method
+    (identifier)
+    (method_parameters
+      (identifier)
+      (block_parameter))
+    (body_statement
+      (call
+        (identifier)
+        (argument_list
+          (identifier)
+          (block_argument))))))
+
+=================================
+unary plus command-call arguments
+=================================
+
+something +x
+something -y
+something + x
+something+x
+do_something +42
+do_something -42
+something + 42
+something+42
+something(+x)
+
+---
+
+(program
+  (call
+    (identifier)
+    (argument_list
+      (unary
+        (identifier))))
+  (call
+    (identifier)
+    (argument_list
+      (unary
+        (identifier))))
+  (binary
+    (identifier)
+    (identifier))
+  (binary
+    (identifier)
+    (identifier))
+  (call
+    (identifier)
+    (argument_list
+      (unary
+        (integer))))
+  (call
+    (identifier)
+    (argument_list
+      (unary
+        (integer))))
+  (binary
+    (identifier)
+    (integer))
+  (binary
+    (identifier)
+    (integer))
+  (call
+    (identifier)
+    (argument_list
+      (unary
+        (identifier)))))
+
+===============================
+bare lambda parameter body boundaries
+===============================
+
+-> x: { }
+-> *a, b: { }
+-> *a, **b { }
+-> *a, b { }
+-> a=a() { a }
+-> a=object.call { a }
+-> x: 1 { }
+-> x: value() { x }
+-> x: value! { x }
+-> *a, b: 1 { }
+-> a=a() do
+  a
+end
+-> *a, b: do
+end
+-> *a, **b do
+end
+-> *a, b do
+end
+
+---
+
+(program
+  (lambda
+    (lambda_parameters
+      (keyword_parameter
+        (identifier)))
+    (block))
+  (lambda
+    (lambda_parameters
+      (splat_parameter
+        (identifier))
+      (keyword_parameter
+        (identifier)))
+    (block))
+  (lambda
+    (lambda_parameters
+      (splat_parameter
+        (identifier))
+      (hash_splat_parameter
+        (identifier)))
+    (block))
+  (lambda
+    (lambda_parameters
+      (splat_parameter
+        (identifier))
+      (identifier))
+    (block))
+  (lambda
+    (lambda_parameters
+      (optional_parameter
+        (identifier)
+        (call
+          (identifier)
+          (argument_list))))
+    (block
+      (block_body
+        (identifier))))
+  (lambda
+    (lambda_parameters
+      (optional_parameter
+        (identifier)
+        (call
+          (identifier)
+          (identifier))))
+    (block
+      (block_body
+        (identifier))))
+  (lambda
+    (lambda_parameters
+      (keyword_parameter
+        (identifier)
+        (integer)))
+    (block))
+  (lambda
+    (lambda_parameters
+      (keyword_parameter
+        (identifier)
+        (call
+          (identifier)
+          (argument_list))))
+    (block
+      (block_body
+        (identifier))))
+  (lambda
+    (lambda_parameters
+      (keyword_parameter
+        (identifier)
+        (call
+          (identifier))))
+    (block
+      (block_body
+        (identifier))))
+  (lambda
+    (lambda_parameters
+      (splat_parameter
+        (identifier))
+      (keyword_parameter
+        (identifier)
+        (integer)))
+    (block))
+  (lambda
+    (lambda_parameters
+      (optional_parameter
+        (identifier)
+        (call
+          (identifier)
+          (argument_list))))
+    (do_block
+      (body_statement
+        (identifier))))
+  (lambda
+    (lambda_parameters
+      (splat_parameter
+        (identifier))
+      (keyword_parameter
+        (identifier)))
+    (do_block))
+  (lambda
+    (lambda_parameters
+      (splat_parameter
+        (identifier))
+      (hash_splat_parameter
+        (identifier)))
+    (do_block))
+  (lambda
+    (lambda_parameters
+      (splat_parameter
+        (identifier))
+      (identifier))
+    (do_block)))
+
+===============================
+parenthesized lambda parameter body boundaries
+===============================
+
+->(x:) {}
+-> (x: 1) { x }
+->(a=a()) { a }
+->(a=call() {}) { a }
+->(*a, b, **k) do
+  [a, b, k]
+end
+
+---
+
+(program
+  (lambda
+    (lambda_parameters
+      (keyword_parameter
+        (identifier)))
+    (block))
+  (lambda
+    (lambda_parameters
+      (keyword_parameter
+        (identifier)
+        (integer)))
+    (block
+      (block_body
+        (identifier))))
+  (lambda
+    (lambda_parameters
+      (optional_parameter
+        (identifier)
+        (call
+          (identifier)
+          (argument_list))))
+    (block
+      (block_body
+        (identifier))))
+  (lambda
+    (lambda_parameters
+      (optional_parameter
+        (identifier)
+        (call
+          (identifier)
+          (argument_list)
+          (block))))
+    (block
+      (block_body
+        (identifier))))
+  (lambda
+    (lambda_parameters
+      (splat_parameter
+        (identifier))
+      (identifier)
+      (hash_splat_parameter
+        (identifier)))
+    (do_block
+      (body_statement
+        (array
+          (identifier)
+          (identifier)
+          (identifier))))))

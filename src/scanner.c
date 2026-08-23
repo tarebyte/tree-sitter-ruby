@@ -15,6 +15,7 @@ typedef enum {
     SYMBOL_START,
     SUBSHELL_START,
     REGEX_START,
+    RANGE_ENDPOINT_REGEX_START,
     STRING_ARRAY_START,
     SYMBOL_ARRAY_START,
     HEREDOC_BODY_START,
@@ -31,15 +32,22 @@ typedef enum {
     UNARY_MINUS,
     UNARY_MINUS_NUM,
     BINARY_MINUS,
+    UNARY_PLUS,
+    BINARY_PLUS,
     BINARY_STAR,
+    BINARY_LEFT_SHIFT,
+    BITWISE_AND,
     SINGLETON_CLASS_LEFT_ANGLE_LEFT_ANGLE,
     HASH_KEY_SYMBOL,
     IDENTIFIER_SUFFIX,
     CONSTANT_SUFFIX,
     HASH_SPLAT_STAR_STAR,
     BINARY_STAR_STAR,
+    MODULO_ASSIGNMENT,
     ELEMENT_REFERENCE_BRACKET,
     SHORT_INTERPOLATION,
+    COMMENT,
+    UNINTERPRETED,
 
     NONE
 } TokenType;
@@ -66,6 +74,9 @@ typedef struct {
     Array(Literal) literal_stack;
     Array(Heredoc) open_heredocs;
 } Scanner;
+
+static const int32_t ASCII_C0_CONTROL_MAX = 0x1f;
+static const int32_t ASCII_MAX = 0x7f;
 
 const char NON_IDENTIFIER_CHARS[] = {
     '\0', '\n', '\r', '\t', ' ', ':', ';', '`',  '"', '\'', '@', '$', '#', '.', ',', '|', '^', '&',
@@ -196,7 +207,7 @@ static inline bool scan_whitespace(Scanner *scanner, TSLexer *lexer, const bool 
                     return true;
                 } else if (!valid_symbols[NO_LINE_BREAK] && valid_symbols[LINE_BREAK] && !crossed_newline) {
                     lexer->mark_end(lexer);
-                    advance(lexer);
+                    skip(scanner, lexer);
                     crossed_newline = true;
                 } else {
                     skip(scanner, lexer);
@@ -336,8 +347,14 @@ static inline bool scan_operator(TSLexer *lexer) {
     }
 }
 
-static inline bool is_iden_char(char c) {
-    return memchr(&NON_IDENTIFIER_CHARS, c, sizeof(NON_IDENTIFIER_CHARS)) == NULL;
+static inline bool is_iden_char(int32_t c) {
+    if (c <= ASCII_C0_CONTROL_MAX || iswspace(c)) {
+        return false;
+    }
+    if (c > ASCII_MAX) {
+        return true;
+    }
+    return memchr(&NON_IDENTIFIER_CHARS, (char)c, sizeof(NON_IDENTIFIER_CHARS)) == NULL;
 }
 
 static inline bool scan_symbol_identifier(TSLexer *lexer) {
@@ -350,13 +367,13 @@ static inline bool scan_symbol_identifier(TSLexer *lexer) {
         advance(lexer);
     }
 
-    if (is_iden_char((char)lexer->lookahead)) {
+    if (is_iden_char(lexer->lookahead)) {
         advance(lexer);
     } else if (!scan_operator(lexer)) {
         return false;
     }
 
-    while (is_iden_char((char)lexer->lookahead)) {
+    while (is_iden_char(lexer->lookahead)) {
         advance(lexer);
     }
 
@@ -375,8 +392,9 @@ static inline bool scan_symbol_identifier(TSLexer *lexer) {
     return true;
 }
 
-static inline bool scan_open_delimiter(Scanner *scanner, TSLexer *lexer, Literal *literal, const bool *valid_symbols) {
-    switch (lexer->lookahead) {
+static inline bool scan_open_delimiter(Scanner *scanner, TSLexer *lexer, Literal *literal,
+                                       const bool *valid_symbols, bool percent_consumed) {
+    switch (percent_consumed ? '%' : lexer->lookahead) {
         case '"':
             literal->type = STRING_START;
             literal->open_delimiter = literal->close_delimiter = lexer->lookahead;
@@ -402,14 +420,15 @@ static inline bool scan_open_delimiter(Scanner *scanner, TSLexer *lexer, Literal
             return true;
 
         case '/':
-            if (!valid_symbols[REGEX_START]) {
+            if (!valid_symbols[REGEX_START] && !valid_symbols[RANGE_ENDPOINT_REGEX_START]) {
                 return false;
             }
-            literal->type = REGEX_START;
+            literal->type =
+                valid_symbols[RANGE_ENDPOINT_REGEX_START] ? RANGE_ENDPOINT_REGEX_START : REGEX_START;
             literal->open_delimiter = literal->close_delimiter = lexer->lookahead;
             literal->allows_interpolation = true;
             advance(lexer);
-            if (valid_symbols[FORWARD_SLASH]) {
+            if (literal->type == REGEX_START && valid_symbols[FORWARD_SLASH]) {
                 if (!scanner->has_leading_whitespace) {
                     return false;
                 }
@@ -424,7 +443,9 @@ static inline bool scan_open_delimiter(Scanner *scanner, TSLexer *lexer, Literal
             return true;
 
         case '%':
-            advance(lexer);
+            if (!percent_consumed) {
+                advance(lexer);
+            }
 
             switch (lexer->lookahead) {
                 case 's':
@@ -565,11 +586,7 @@ static inline bool scan_open_delimiter(Scanner *scanner, TSLexer *lexer, Literal
                 case ']':
                 case '}':
                 case '>':
-                // TODO: Implement %= as external rule and re-enable = as a valid
-                // unbalanced delimiter. That will be necessary due to ambiguity
-                // between &= assignment operator and %=...= as string
-                // content delimiter.
-                // case '=':
+                case '=':
                 case '+':
                 case '-':
                 case '~':
@@ -630,6 +647,17 @@ static inline void scan_heredoc_word(TSLexer *lexer, Heredoc *heredoc) {
     heredoc->allows_interpolation = quote != '\'';
 }
 
+static inline void enqueue_heredoc(Scanner *scanner, Heredoc heredoc) {
+    // Nested heredocs precede the active outer body, but pending heredocs remain FIFO.
+    for (uint32_t i = 0; i < scanner->open_heredocs.size; i++) {
+        if (scanner->open_heredocs.contents[i].started) {
+            array_insert(&scanner->open_heredocs, i, heredoc);
+            return;
+        }
+    }
+    array_push(&scanner->open_heredocs, heredoc);
+}
+
 static inline bool scan_short_interpolation(TSLexer *lexer, const bool has_content, const TSSymbol content_symbol) {
     char start = (char)lexer->lookahead;
     if (start == '@' || start == '$') {
@@ -656,7 +684,7 @@ static inline bool scan_short_interpolation(TSLexer *lexer, const bool has_conte
             if (lexer->lookahead == '@') {
                 advance(lexer);
             }
-            is_short_interpolation = is_iden_char((char)lexer->lookahead) && !iswdigit(lexer->lookahead);
+            is_short_interpolation = is_iden_char(lexer->lookahead) && !iswdigit(lexer->lookahead);
         }
 
         if (is_short_interpolation) {
@@ -783,7 +811,7 @@ static inline bool scan_literal_content(Scanner *scanner, TSLexer *lexer) {
                     lexer->result_symbol = STRING_CONTENT;
                 } else {
                     advance(lexer);
-                    if (literal->type == REGEX_START) {
+                    if (literal->type == REGEX_START || literal->type == RANGE_ENDPOINT_REGEX_START) {
                         while (iswlower(lexer->lookahead)) {
                             advance(lexer);
                         }
@@ -814,7 +842,8 @@ static inline bool scan_literal_content(Scanner *scanner, TSLexer *lexer) {
                 return true;
             }
         } else if (lexer->lookahead == '\\') {
-            if (literal->allows_interpolation) {
+            if (literal->allows_interpolation && literal->type != REGEX_START &&
+                literal->type != RANGE_ENDPOINT_REGEX_START) {
                 if (has_content) {
                     lexer->mark_end(lexer);
                     lexer->result_symbol = STRING_CONTENT;
@@ -837,8 +866,79 @@ static inline bool scan_literal_content(Scanner *scanner, TSLexer *lexer) {
     }
 }
 
+static inline bool scan_comment(TSLexer *lexer) {
+    if (lexer->lookahead == '#') {
+        while (!lexer->eof(lexer) && lexer->lookahead != '\r' && lexer->lookahead != '\n') {
+            advance(lexer);
+        }
+        lexer->mark_end(lexer);
+        lexer->result_symbol = COMMENT;
+        return true;
+    }
+
+    if (lexer->lookahead != '=' || lexer->get_column(lexer) != 0) {
+        return false;
+    }
+
+    const char *begin = "=begin";
+    for (unsigned i = 0; begin[i] != '\0'; i++) {
+        if (lexer->lookahead != begin[i]) {
+            return false;
+        }
+        advance(lexer);
+    }
+
+    while (!lexer->eof(lexer) && lexer->lookahead != '\r' && lexer->lookahead != '\n') {
+        advance(lexer);
+    }
+
+    while (!lexer->eof(lexer)) {
+        if (lexer->lookahead == '\r') {
+            advance(lexer);
+        }
+        if (lexer->lookahead == '\n') {
+            advance(lexer);
+        }
+
+        if (lexer->lookahead == '=') {
+            const char *end = "=end";
+            unsigned i = 0;
+            while (end[i] != '\0' && lexer->lookahead == end[i]) {
+                advance(lexer);
+                i++;
+            }
+
+            if (end[i] == '\0' &&
+                (lexer->eof(lexer) || lexer->lookahead == '\r' || lexer->lookahead == '\n' ||
+                 lexer->lookahead == ' ' || lexer->lookahead == '\t')) {
+                while (!lexer->eof(lexer) && lexer->lookahead != '\r' && lexer->lookahead != '\n') {
+                    advance(lexer);
+                }
+                lexer->mark_end(lexer);
+                lexer->result_symbol = COMMENT;
+                return true;
+            }
+        }
+
+        while (!lexer->eof(lexer) && lexer->lookahead != '\r' && lexer->lookahead != '\n') {
+            advance(lexer);
+        }
+    }
+
+    return false;
+}
+
 static inline bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     scanner->has_leading_whitespace = false;
+
+    if (valid_symbols[UNINTERPRETED] && !valid_symbols[LINE_BREAK]) {
+        while (!lexer->eof(lexer)) {
+            advance(lexer);
+        }
+        lexer->mark_end(lexer);
+        lexer->result_symbol = UNINTERPRETED;
+        return true;
+    }
 
     // Contents of literals, which match any character except for some close delimiter
     if (!valid_symbols[STRING_START]) {
@@ -859,26 +959,74 @@ static inline bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symb
         return true;
     }
 
+    if (valid_symbols[COMMENT] && scan_comment(lexer)) {
+        return true;
+    }
+
     switch (lexer->lookahead) {
         case '&':
-            if (valid_symbols[BLOCK_AMPERSAND]) {
+            if (valid_symbols[BLOCK_AMPERSAND] || valid_symbols[BITWISE_AND]) {
                 advance(lexer);
-                if (lexer->lookahead != '&' && lexer->lookahead != '.' && lexer->lookahead != '=' &&
-                    !iswspace(lexer->lookahead)) {
+                if (lexer->lookahead == '&' || lexer->lookahead == '.' || lexer->lookahead == '=') {
+                    return false;
+                }
+                if (valid_symbols[BLOCK_AMPERSAND] &&
+                    (!valid_symbols[BITWISE_AND] ||
+                     (scanner->has_leading_whitespace && !iswspace(lexer->lookahead)))) {
                     lexer->result_symbol = BLOCK_AMPERSAND;
                     return true;
                 }
-                return false;
+                if (valid_symbols[BITWISE_AND]) {
+                    lexer->result_symbol = BITWISE_AND;
+                    return true;
+                }
             }
             break;
 
         case '<':
-            if (valid_symbols[SINGLETON_CLASS_LEFT_ANGLE_LEFT_ANGLE]) {
+            if (valid_symbols[SINGLETON_CLASS_LEFT_ANGLE_LEFT_ANGLE] || valid_symbols[BINARY_LEFT_SHIFT] ||
+                valid_symbols[HEREDOC_START]) {
                 advance(lexer);
                 if (lexer->lookahead == '<') {
                     advance(lexer);
-                    lexer->result_symbol = SINGLETON_CLASS_LEFT_ANGLE_LEFT_ANGLE;
-                    return true;
+                    lexer->mark_end(lexer);
+
+                    if (lexer->lookahead == '=') {
+                        return false;
+                    }
+
+                    if (valid_symbols[SINGLETON_CLASS_LEFT_ANGLE_LEFT_ANGLE]) {
+                        lexer->result_symbol = SINGLETON_CLASS_LEFT_ANGLE_LEFT_ANGLE;
+                        return true;
+                    }
+
+                    if (valid_symbols[BINARY_LEFT_SHIFT] &&
+                        (!valid_symbols[HEREDOC_START] || !scanner->has_leading_whitespace)) {
+                        lexer->result_symbol = BINARY_LEFT_SHIFT;
+                        return true;
+                    }
+
+                    if (valid_symbols[HEREDOC_START]) {
+                        Heredoc heredoc = {0};
+                        if (lexer->lookahead == '-' || lexer->lookahead == '~') {
+                            advance(lexer);
+                            heredoc.end_word_indentation_allowed = true;
+                        }
+
+                        scan_heredoc_word(lexer, &heredoc);
+                        if (heredoc.word.size > 0) {
+                            lexer->mark_end(lexer);
+                            enqueue_heredoc(scanner, heredoc);
+                            lexer->result_symbol = HEREDOC_START;
+                            return true;
+                        }
+                        array_delete(&heredoc.word);
+                    }
+
+                    if (valid_symbols[BINARY_LEFT_SHIFT]) {
+                        lexer->result_symbol = BINARY_LEFT_SHIFT;
+                        return true;
+                    }
                 }
                 return false;
             }
@@ -960,6 +1108,24 @@ static inline bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symb
             }
             break;
 
+        case '+':
+            if (valid_symbols[UNARY_PLUS] || valid_symbols[BINARY_PLUS]) {
+                advance(lexer);
+                if (lexer->lookahead == '=') {
+                    return false;
+                }
+                if (valid_symbols[UNARY_PLUS] && scanner->has_leading_whitespace &&
+                    !iswspace(lexer->lookahead)) {
+                    lexer->result_symbol = UNARY_PLUS;
+                } else if (valid_symbols[BINARY_PLUS]) {
+                    lexer->result_symbol = BINARY_PLUS;
+                } else {
+                    lexer->result_symbol = UNARY_PLUS;
+                }
+                return true;
+            }
+            break;
+
         case ':':
             if (valid_symbols[SYMBOL_START]) {
                 Literal literal = {0};
@@ -993,6 +1159,25 @@ static inline bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symb
                         }
                 }
 
+                return false;
+            }
+            break;
+
+        case '%':
+            if (valid_symbols[MODULO_ASSIGNMENT]) {
+                Literal literal = {0};
+                literal.nesting_depth = 1;
+                advance(lexer);
+                if (lexer->lookahead == '=') {
+                    advance(lexer);
+                    lexer->result_symbol = MODULO_ASSIGNMENT;
+                    return true;
+                }
+                if (scan_open_delimiter(scanner, lexer, &literal, valid_symbols, true)) {
+                    array_push(&scanner->literal_stack, literal);
+                    lexer->result_symbol = literal.type;
+                    return true;
+                }
                 return false;
             }
             break;
@@ -1041,34 +1226,11 @@ static inline bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symb
     }
 
     // Open delimiters for literals
-    if (valid_symbols[STRING_START]) {
+    if (valid_symbols[STRING_START] || valid_symbols[RANGE_ENDPOINT_REGEX_START]) {
         Literal literal = {0};
         literal.nesting_depth = 1;
 
-        if (lexer->lookahead == '<') {
-            advance(lexer);
-            if (lexer->lookahead != '<') {
-                return false;
-            }
-            advance(lexer);
-
-            Heredoc heredoc = {0};
-            if (lexer->lookahead == '-' || lexer->lookahead == '~') {
-                advance(lexer);
-                heredoc.end_word_indentation_allowed = true;
-            }
-
-            scan_heredoc_word(lexer, &heredoc);
-            if (heredoc.word.size == 0) {
-                array_delete(&heredoc.word);
-                return false;
-            }
-            array_push(&scanner->open_heredocs, heredoc);
-            lexer->result_symbol = HEREDOC_START;
-            return true;
-        }
-
-        if (scan_open_delimiter(scanner, lexer, &literal, valid_symbols)) {
+        if (scan_open_delimiter(scanner, lexer, &literal, valid_symbols, false)) {
             array_push(&scanner->literal_stack, literal);
             lexer->result_symbol = literal.type;
             return true;
