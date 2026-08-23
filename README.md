@@ -11,7 +11,7 @@ Ruby grammar for [tree-sitter](https://github.com/tree-sitter/tree-sitter).
 
 #### References
 
-- [AST Format of the Whitequark parser](https://github.com/whitequark/parser/blob/master/doc/AST_FORMAT.md)
+- [Prism documentation](https://ruby.github.io/prism/)
 
 [ci]: https://img.shields.io/github/actions/workflow/status/tree-sitter/tree-sitter-ruby/ci.yml?logo=github&label=CI
 [discord]: https://img.shields.io/discord/1063097320771698699?logo=discord&label=discord
