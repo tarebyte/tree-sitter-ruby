@@ -88,21 +88,13 @@ fn tree_sitter_errors(parser: &mut tree_sitter::Parser, source: &[u8]) -> Vec<St
     errors
 }
 
-fn prism_diagnostics(source: &[u8]) -> Vec<String> {
-    let result = prism::parse(source);
+fn prism_accepts(source: &[u8]) -> bool {
+    prism::parse(source).errors().next().is_none()
+}
 
-    result
-        .errors()
-        .map(|diagnostic| {
-            let location = diagnostic.location();
-            format!(
-                "{} at byte {}-{}",
-                diagnostic.message(),
-                location.start_offset(),
-                location.end_offset()
-            )
-        })
-        .collect()
+fn has_supported_encoding(source: &[u8]) -> bool {
+    // BOM-less UTF-16 can be byte-valid UTF-8 because its ASCII code units contain NULs.
+    std::str::from_utf8(source).is_ok() && !source.contains(&0)
 }
 
 fn load_allowlist(path: &Path) -> BTreeMap<String, String> {
@@ -143,7 +135,6 @@ fn load_allowlist(path: &Path) -> BTreeMap<String, String> {
 }
 
 #[test]
-#[ignore = "requires PRISM_RUBY_SPEC_ROOT"]
 fn ruby_spec_matches_prism() {
     let configured_root = PathBuf::from(
         std::env::var_os("PRISM_RUBY_SPEC_ROOT")
@@ -159,13 +150,18 @@ fn ruby_spec_matches_prism() {
     let mut parser = parser();
     let mut prism_valid = 0;
     let mut prism_invalid = 0;
+    let mut unsupported_encoding = 0;
     let mut expected_mismatches = 0;
     let mut unexpected_mismatches = Vec::new();
 
     for path in ruby_files(&root) {
         let source = fs::read(&path)
             .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
-        if !prism_diagnostics(&source).is_empty() {
+        if !has_supported_encoding(&source) {
+            unsupported_encoding += 1;
+            continue;
+        }
+        if !prism_accepts(&source) {
             prism_invalid += 1;
             continue;
         }
@@ -199,6 +195,7 @@ fn ruby_spec_matches_prism() {
 
     println!(
         "Prism conformance: {prism_valid} valid files, {prism_invalid} invalid files, \
+         {unsupported_encoding} files with unsupported encodings, \
          {expected_mismatches} expected mismatches, {} unexpected mismatches",
         unexpected_mismatches.len()
     );
