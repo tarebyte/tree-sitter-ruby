@@ -14,7 +14,7 @@
 #pragma GCC optimize ("O0")
 #endif
 
-#define LANGUAGE_VERSION 14
+#define LANGUAGE_VERSION 15
 #define STATE_COUNT 6869
 #define LARGE_STATE_COUNT 2397
 #define SYMBOL_COUNT 369
@@ -25,7 +25,7 @@
 #define MAX_ALIAS_SEQUENCE_LENGTH 8
 #define MAX_RESERVED_WORD_SET_SIZE 0
 #define PRODUCTION_ID_COUNT 133
-#define SUPERTYPE_COUNT 0
+#define SUPERTYPE_COUNT 14
 
 enum ts_symbol_identifiers {
   sym_identifier = 1,
@@ -10187,6 +10187,212 @@ static const TSStateId ts_primary_state_ids[STATE_COUNT] = {
   [6868] = 6868,
 };
 
+static const TSSymbol ts_supertype_symbols[SUPERTYPE_COUNT] = {
+  sym__arg,
+  sym__expression,
+  sym__lhs,
+  sym__method_name,
+  sym__nonlocal_variable,
+  sym__pattern_constant,
+  sym__pattern_expr,
+  sym__pattern_expr_basic,
+  sym__pattern_primitive,
+  sym__pattern_top_expr_body,
+  sym__primary,
+  sym__simple_numeric,
+  sym__statement,
+  sym__variable,
+};
+
+static const TSMapSlice ts_supertype_map_slices[] = {
+  [sym__arg] = {.index = 0, .length = 11},
+  [sym__expression] = {.index = 11, .length = 24},
+  [sym__lhs] = {.index = 35, .length = 7},
+  [sym__method_name] = {.index = 42, .length = 7},
+  [sym__nonlocal_variable] = {.index = 49, .length = 3},
+  [sym__pattern_constant] = {.index = 52, .length = 3},
+  [sym__pattern_expr] = {.index = 55, .length = 3},
+  [sym__pattern_expr_basic] = {.index = 58, .length = 11},
+  [sym__pattern_primitive] = {.index = 69, .length = 22},
+  [sym__pattern_top_expr_body] = {.index = 91, .length = 4},
+  [sym__primary] = {.index = 95, .length = 41},
+  [sym__simple_numeric] = {.index = 136, .length = 4},
+  [sym__statement] = {.index = 140, .length = 10},
+  [sym__variable] = {.index = 150, .length = 5},
+};
+
+static const TSSymbol ts_supertype_map_entries[] = {
+  [0] =
+    sym__primary,
+    sym__unary_minus_pow,
+    sym_assignment,
+    sym_binary,
+    sym_command_unary,
+    sym_conditional,
+    sym_operator_assignment,
+    sym_parenthesized_unary,
+    sym_range,
+    sym_unary,
+    sym_unary_literal,
+  [11] =
+    sym__arg,
+    sym__pow,
+    sym__unary_minus_pow,
+    sym_assignment,
+    sym_binary,
+    sym_break,
+    sym_break_command,
+    sym_call,
+    sym_command_assignment,
+    sym_command_binary,
+    sym_command_operator_assignment,
+    sym_command_unary,
+    sym_match_pattern,
+    sym_next,
+    sym_next_command,
+    sym_operator_assignment,
+    sym_parenthesized_unary,
+    sym_return,
+    sym_return_command,
+    sym_test_pattern,
+    sym_unary,
+    sym_unary_literal,
+    sym_yield,
+    sym_yield_command,
+  [35] =
+    sym__variable,
+    sym_call,
+    sym_element_reference,
+    sym_false,
+    sym_nil,
+    sym_scope_resolution,
+    sym_true,
+  [42] =
+    sym__nonlocal_variable,
+    sym_constant,
+    sym_delimited_symbol,
+    sym_identifier,
+    sym_operator,
+    sym_setter,
+    sym_simple_symbol,
+  [49] =
+    sym_class_variable,
+    sym_global_variable,
+    sym_instance_variable,
+  [52] =
+    sym__pattern_constant_resolution,
+    sym_constant,
+    sym_scope_resolution,
+  [55] =
+    sym__pattern_expr_basic,
+    sym_alternative_pattern,
+    sym_as_pattern,
+  [58] =
+    sym__pattern_constant,
+    sym__pattern_primitive,
+    sym__pattern_range,
+    sym_array_pattern,
+    sym_expression_reference_pattern,
+    sym_find_pattern,
+    sym_hash_pattern,
+    sym_identifier,
+    sym_parenthesized_pattern,
+    sym_range,
+    sym_variable_reference_pattern,
+  [69] =
+    sym__simple_numeric,
+    sym__unary_minus_pow,
+    sym_command_unary,
+    sym_delimited_symbol,
+    sym_encoding,
+    sym_false,
+    sym_file,
+    sym_heredoc_beginning,
+    sym_lambda,
+    sym_line,
+    sym_nil,
+    sym_parenthesized_unary,
+    sym_regex,
+    sym_self,
+    sym_simple_symbol,
+    sym_string,
+    sym_string_array,
+    sym_subshell,
+    sym_symbol_array,
+    sym_true,
+    sym_unary,
+    sym_unary_literal,
+  [91] =
+    sym__pattern_expr,
+    sym_array_pattern,
+    sym_find_pattern,
+    sym_hash_pattern,
+  [95] =
+    sym__lhs,
+    sym__simple_numeric,
+    sym__unary_minus_pow,
+    sym_array,
+    sym_begin,
+    sym_break,
+    sym_call,
+    sym_case,
+    sym_case_match,
+    sym_chained_string,
+    sym_character,
+    sym_class,
+    sym_command_unary,
+    sym_delimited_symbol,
+    sym_for,
+    sym_hash,
+    sym_heredoc_beginning,
+    sym_if,
+    sym_lambda,
+    sym_method,
+    sym_module,
+    sym_next,
+    sym_parenthesized_statements,
+    sym_parenthesized_unary,
+    sym_redo,
+    sym_regex,
+    sym_retry,
+    sym_return,
+    sym_simple_symbol,
+    sym_singleton_class,
+    sym_singleton_method,
+    sym_string,
+    sym_string_array,
+    sym_subshell,
+    sym_symbol_array,
+    sym_unary,
+    sym_unary_literal,
+    sym_unless,
+    sym_until,
+    sym_while,
+    sym_yield,
+  [136] =
+    sym_complex,
+    sym_float,
+    sym_integer,
+    sym_rational,
+  [140] =
+    sym__expression,
+    sym_alias,
+    sym_begin_block,
+    sym_end_block,
+    sym_if_modifier,
+    sym_rescue_modifier,
+    sym_undef,
+    sym_unless_modifier,
+    sym_until_modifier,
+    sym_while_modifier,
+  [150] =
+    sym__nonlocal_variable,
+    sym_constant,
+    sym_identifier,
+    sym_self,
+    sym_super,
+};
+
 static bool ts_lex(TSLexer *lexer, TSStateId state) {
   START_LEXER();
   eof = lexer->eof(lexer);
@@ -13456,7 +13662,7 @@ static bool ts_lex_keywords(TSLexer *lexer, TSStateId state) {
   }
 }
 
-static const TSLexMode ts_lex_modes[STATE_COUNT] = {
+static const TSLexerMode ts_lex_modes[STATE_COUNT] = {
   [0] = {.lex_state = 0, .external_lex_state = 1},
   [1] = {.lex_state = 134, .external_lex_state = 2},
   [2] = {.lex_state = 127, .external_lex_state = 3},
@@ -530631,6 +530837,7 @@ TS_PUBLIC const TSLanguage *tree_sitter_ruby(void) {
     .state_count = STATE_COUNT,
     .large_state_count = LARGE_STATE_COUNT,
     .production_id_count = PRODUCTION_ID_COUNT,
+    .supertype_count = SUPERTYPE_COUNT,
     .field_count = FIELD_COUNT,
     .max_alias_sequence_length = MAX_ALIAS_SEQUENCE_LENGTH,
     .parse_table = &ts_parse_table[0][0],
@@ -530641,6 +530848,9 @@ TS_PUBLIC const TSLanguage *tree_sitter_ruby(void) {
     .field_names = ts_field_names,
     .field_map_slices = ts_field_map_slices,
     .field_map_entries = ts_field_map_entries,
+    .supertype_map_slices = ts_supertype_map_slices,
+    .supertype_map_entries = ts_supertype_map_entries,
+    .supertype_symbols = ts_supertype_symbols,
     .symbol_metadata = ts_symbol_metadata,
     .public_symbol_map = ts_symbol_map,
     .alias_map = ts_non_terminal_alias_map,
@@ -530659,6 +530869,13 @@ TS_PUBLIC const TSLanguage *tree_sitter_ruby(void) {
       tree_sitter_ruby_external_scanner_deserialize,
     },
     .primary_state_ids = ts_primary_state_ids,
+    .name = "ruby",
+    .max_reserved_word_set_size = 0,
+    .metadata = {
+      .major_version = 0,
+      .minor_version = 23,
+      .patch_version = 1,
+    },
   };
   return &language;
 }
