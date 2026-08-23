@@ -1,0 +1,1 @@
+def unsupported() = raise NotImplementedError

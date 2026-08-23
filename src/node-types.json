@@ -672,7 +672,23 @@
           "named": true
         },
         {
+          "type": "_simple_numeric",
+          "named": true
+        },
+        {
+          "type": "_variable",
+          "named": true
+        },
+        {
           "type": "block_argument",
+          "named": true
+        },
+        {
+          "type": "delimited_symbol",
+          "named": true
+        },
+        {
+          "type": "false",
           "named": true
         },
         {
@@ -684,11 +700,27 @@
           "named": true
         },
         {
+          "type": "nil",
+          "named": true
+        },
+        {
           "type": "pair",
           "named": true
         },
         {
+          "type": "simple_symbol",
+          "named": true
+        },
+        {
           "type": "splat_argument",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        },
+        {
+          "type": "true",
           "named": true
         }
       ]
@@ -2403,6 +2435,10 @@
             "named": true
           },
           {
+            "type": "call",
+            "named": true
+          },
+          {
             "type": "rescue_modifier",
             "named": true
           }
@@ -2674,6 +2710,42 @@
         "types": [
           {
             "type": "_arg",
+            "named": true
+          },
+          {
+            "type": "_simple_numeric",
+            "named": true
+          },
+          {
+            "type": "_variable",
+            "named": true
+          },
+          {
+            "type": "delimited_symbol",
+            "named": true
+          },
+          {
+            "type": "false",
+            "named": true
+          },
+          {
+            "type": "nil",
+            "named": true
+          },
+          {
+            "type": "pair",
+            "named": true
+          },
+          {
+            "type": "simple_symbol",
+            "named": true
+          },
+          {
+            "type": "string",
+            "named": true
+          },
+          {
+            "type": "true",
             "named": true
           }
         ]
@@ -3078,6 +3150,10 @@
           },
           {
             "type": "body_statement",
+            "named": true
+          },
+          {
+            "type": "call",
             "named": true
           },
           {

@@ -1,0 +1,3 @@
+puts<<HERE
+content
+HERE

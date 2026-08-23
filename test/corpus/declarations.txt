@@ -40,6 +40,10 @@ def foo(x) = bar
 def Object.foo = bar
 def Object.foo (x) = bar
 def foo() = bar rescue (print "error")
+def unsupported() = raise NotImplementedError
+def print_number = puts 1
+def print_string = puts "value"
+def keywords = configure enabled: true
 
 ---
 
@@ -55,6 +59,15 @@ def foo() = bar rescue (print "error")
       handler: (parenthesized_statements (call method: (identifier) arguments: (argument_list (string (string_content)))))
     )
   )
+  (method name: (identifier) parameters: (method_parameters)
+    body: (call method: (identifier) arguments: (argument_list (constant))))
+  (method name: (identifier)
+    body: (call method: (identifier) arguments: (argument_list (integer))))
+  (method name: (identifier)
+    body: (call method: (identifier) arguments: (argument_list (string (string_content)))))
+  (method name: (identifier)
+    body: (call method: (identifier) arguments: (argument_list
+      (pair key: (hash_key_symbol) value: (true)))))
 )
 
 ===========================

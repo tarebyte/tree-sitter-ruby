@@ -673,7 +673,9 @@ interpolation
 
 "#{foo}"
 "foo#@foo"
+"foo#@言"
 "#@@foo"
+"#@@言"
 "#$foo"
 "#$%"
 "#$1"
@@ -694,6 +696,13 @@ interpolation
     (string_content)
     (interpolation
       (instance_variable)))
+  (string
+    (string_content)
+    (interpolation
+      (instance_variable)))
+  (string
+    (interpolation
+      (class_variable)))
   (string
     (interpolation
       (class_variable)))
@@ -2075,6 +2084,27 @@ regular expression
   (regex
     (string_content)))
 
+==========================================
+regular expression with character classes
+==========================================
+
+/\d+/
+/\w+/
+/[[:alpha:]]/
+/[[[:alpha:]]\d]+/
+
+---
+
+(program
+  (regex
+    (string_content))
+  (regex
+    (string_content))
+  (regex
+    (string_content))
+  (regex
+    (string_content)))
+
 =====================================
 regular expression with interpolation
 =====================================
@@ -2290,6 +2320,9 @@ Cß
 @äö
 @@äö
 :äö
+:言
+:你
+:일
 äö
 
 ---
@@ -2298,5 +2331,8 @@ Cß
   (constant)
   (instance_variable)
   (class_variable)
+  (simple_symbol)
+  (simple_symbol)
+  (simple_symbol)
   (simple_symbol)
   (identifier))

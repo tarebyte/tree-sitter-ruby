@@ -94,6 +94,18 @@ multi-line block comments with almost end
 (program (comment))
 
 =========================
+block comment terminator must begin a line
+=========================
+
+=begin
+world =end
+=end
+
+---
+
+(program (comment))
+
+=========================
 block comment without newline after end
 =========================
 

@@ -32,6 +32,7 @@ typedef enum {
     UNARY_MINUS_NUM,
     BINARY_MINUS,
     BINARY_STAR,
+    BITWISE_AND,
     SINGLETON_CLASS_LEFT_ANGLE_LEFT_ANGLE,
     HASH_KEY_SYMBOL,
     IDENTIFIER_SUFFIX,
@@ -67,6 +68,9 @@ typedef struct {
     Array(Heredoc) open_heredocs;
 } Scanner;
 
+static const int32_t ASCII_C0_CONTROL_MAX = 0x1f;
+static const int32_t ASCII_MAX = 0x7f;
+
 const char NON_IDENTIFIER_CHARS[] = {
     '\0', '\n', '\r', '\t', ' ', ':', ';', '`',  '"', '\'', '@', '$', '#', '.', ',', '|', '^', '&',
     '<',  '=',  '>',  '+',  '-', '*', '/', '\\', '%', '?',  '!', '~', '(', ')', '[', ']', '{', '}',
@@ -85,6 +89,24 @@ static inline void reset(Scanner *scanner) {
         array_delete(&array_get(&scanner->open_heredocs, i)->word);
     }
     array_delete(&scanner->open_heredocs);
+}
+
+static inline bool can_read(unsigned size, unsigned length, unsigned bytes) {
+    return size <= length && bytes <= length - size;
+}
+
+static inline bool is_valid_literal_type(TokenType type) {
+    switch (type) {
+        case STRING_START:
+        case SYMBOL_START:
+        case SUBSHELL_START:
+        case REGEX_START:
+        case STRING_ARRAY_START:
+        case SYMBOL_ARRAY_START:
+            return true;
+        default:
+            return false;
+    }
 }
 
 static inline unsigned serialize(Scanner *scanner, char *buffer) {
@@ -133,26 +155,51 @@ static inline void deserialize(Scanner *scanner, const char *buffer, unsigned le
 
     uint8_t literal_depth = buffer[size++];
     for (unsigned j = 0; j < literal_depth; j++) {
+        if (!can_read(size, length, 5)) {
+            reset(scanner);
+            return;
+        }
+
         Literal literal = {0};
-        literal.type = (TokenType)(buffer[size++]);
+        literal.type = (TokenType)(uint8_t)buffer[size++];
         literal.open_delimiter = (unsigned char)buffer[size++];
         literal.close_delimiter = (unsigned char)buffer[size++];
         literal.nesting_depth = (unsigned char)buffer[size++];
         literal.allows_interpolation = buffer[size++];
+        if (!is_valid_literal_type(literal.type) || literal.nesting_depth == 0) {
+            reset(scanner);
+            return;
+        }
         array_push(&scanner->literal_stack, literal);
+    }
+
+    if (!can_read(size, length, 1)) {
+        reset(scanner);
+        return;
     }
 
     uint8_t open_heredoc_count = buffer[size++];
     for (unsigned j = 0; j < open_heredoc_count; j++) {
+        if (!can_read(size, length, 3 + sizeof(uint32_t))) {
+            reset(scanner);
+            return;
+        }
+
         Heredoc heredoc = {0};
         heredoc.end_word_indentation_allowed = buffer[size++];
         heredoc.allows_interpolation = buffer[size++];
         heredoc.started = buffer[size++];
 
-        heredoc.word = (String)array_new();
         uint32_t word_length;
         memcpy(&word_length, &buffer[size], sizeof(uint32_t));
         size += sizeof(uint32_t);
+
+        if (word_length == 0 || !can_read(size, length, word_length)) {
+            reset(scanner);
+            return;
+        }
+
+        heredoc.word = (String)array_new();
         array_reserve(&heredoc.word, word_length);
         memcpy(heredoc.word.contents, &buffer[size], word_length);
         heredoc.word.size = word_length;
@@ -160,7 +207,9 @@ static inline void deserialize(Scanner *scanner, const char *buffer, unsigned le
         array_push(&scanner->open_heredocs, heredoc);
     }
 
-    assert(size == length);
+    if (size != length) {
+        reset(scanner);
+    }
 }
 
 static inline bool scan_whitespace(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
@@ -336,8 +385,14 @@ static inline bool scan_operator(TSLexer *lexer) {
     }
 }
 
-static inline bool is_iden_char(char c) {
-    return memchr(&NON_IDENTIFIER_CHARS, c, sizeof(NON_IDENTIFIER_CHARS)) == NULL;
+static inline bool is_iden_char(int32_t c) {
+    if (c <= ASCII_C0_CONTROL_MAX || iswspace(c)) {
+        return false;
+    }
+    if (c > ASCII_MAX) {
+        return true;
+    }
+    return memchr(&NON_IDENTIFIER_CHARS, (char)c, sizeof(NON_IDENTIFIER_CHARS)) == NULL;
 }
 
 static inline bool scan_symbol_identifier(TSLexer *lexer) {
@@ -350,13 +405,13 @@ static inline bool scan_symbol_identifier(TSLexer *lexer) {
         advance(lexer);
     }
 
-    if (is_iden_char((char)lexer->lookahead)) {
+    if (is_iden_char(lexer->lookahead)) {
         advance(lexer);
     } else if (!scan_operator(lexer)) {
         return false;
     }
 
-    while (is_iden_char((char)lexer->lookahead)) {
+    while (is_iden_char(lexer->lookahead)) {
         advance(lexer);
     }
 
@@ -565,10 +620,9 @@ static inline bool scan_open_delimiter(Scanner *scanner, TSLexer *lexer, Literal
                 case ']':
                 case '}':
                 case '>':
-                // TODO: Implement %= as external rule and re-enable = as a valid
-                // unbalanced delimiter. That will be necessary due to ambiguity
-                // between &= assignment operator and %=...= as string
-                // content delimiter.
+                // TODO: Implement %= as an external rule and re-enable = as a valid
+                // unbalanced delimiter. This is ambiguous with the %= assignment
+                // operator in parser states that accept both tokens.
                 // case '=':
                 case '+':
                 case '-':
@@ -656,7 +710,7 @@ static inline bool scan_short_interpolation(TSLexer *lexer, const bool has_conte
             if (lexer->lookahead == '@') {
                 advance(lexer);
             }
-            is_short_interpolation = is_iden_char((char)lexer->lookahead) && !iswdigit(lexer->lookahead);
+            is_short_interpolation = is_iden_char(lexer->lookahead) && !iswdigit(lexer->lookahead);
         }
 
         if (is_short_interpolation) {
@@ -814,7 +868,7 @@ static inline bool scan_literal_content(Scanner *scanner, TSLexer *lexer) {
                 return true;
             }
         } else if (lexer->lookahead == '\\') {
-            if (literal->allows_interpolation) {
+            if (literal->allows_interpolation && literal->type != REGEX_START) {
                 if (has_content) {
                     lexer->mark_end(lexer);
                     lexer->result_symbol = STRING_CONTENT;
@@ -861,12 +915,18 @@ static inline bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symb
 
     switch (lexer->lookahead) {
         case '&':
-            if (valid_symbols[BLOCK_AMPERSAND]) {
+            if (valid_symbols[BLOCK_AMPERSAND] || valid_symbols[BITWISE_AND]) {
                 advance(lexer);
-                if (lexer->lookahead != '&' && lexer->lookahead != '.' && lexer->lookahead != '=' &&
-                    !iswspace(lexer->lookahead)) {
-                    lexer->result_symbol = BLOCK_AMPERSAND;
-                    return true;
+                if (lexer->lookahead != '&' && lexer->lookahead != '.' && lexer->lookahead != '=') {
+                    if (valid_symbols[BLOCK_AMPERSAND] &&
+                        (!valid_symbols[BITWISE_AND] || !iswspace(lexer->lookahead))) {
+                        lexer->result_symbol = BLOCK_AMPERSAND;
+                        return true;
+                    }
+                    if (valid_symbols[BITWISE_AND]) {
+                        lexer->result_symbol = BITWISE_AND;
+                        return true;
+                    }
                 }
                 return false;
             }
@@ -1046,6 +1106,9 @@ static inline bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symb
         literal.nesting_depth = 1;
 
         if (lexer->lookahead == '<') {
+            if (!valid_symbols[HEREDOC_START]) {
+                return false;
+            }
             advance(lexer);
             if (lexer->lookahead != '<') {
                 return false;

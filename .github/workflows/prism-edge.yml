@@ -1,0 +1,29 @@
+name: Prism Edge
+
+on:
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+jobs:
+  conformance:
+    name: Test current Ruby Spec
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Check out Ruby Spec
+        uses: actions/checkout@v4
+        with:
+          repository: ruby/spec
+          path: examples/ruby_spec
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Test Prism conformance
+        env:
+          PRISM_RUBY_SPEC_ROOT: examples/ruby_spec
+        run: >-
+          cargo test --locked
+          --manifest-path tools/prism-conformance/Cargo.toml
+          --test conformance ruby_spec_matches_prism
+          -- --ignored --nocapture

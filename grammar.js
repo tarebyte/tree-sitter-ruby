@@ -64,7 +64,8 @@ module.exports = grammar({
     $._unary_minus_num,
     $._binary_minus,
     $._binary_star,
-    $._singleton_class_left_angle_left_langle,
+    $._bitwise_and,
+    $._singleton_class_left_angle_left_angle,
     $.hash_key_symbol,
     $._identifier_suffix,
     $._constant_suffix,
@@ -201,10 +202,39 @@ module.exports = grammar({
         field('body',
           choice(
             $._arg,
+            alias($._endless_command_call, $.call),
             alias($.rescue_modifier_arg, $.rescue_modifier),
           )),
       ),
 
+    _endless_command_call: $ => seq(
+      field('method', choice($._variable, $._function_identifier)),
+      field('arguments', alias($._endless_argument_list, $.argument_list)),
+    ),
+
+    _endless_argument_list: $ => prec.right(commaSep1($._endless_argument)),
+
+    _endless_argument: $ => choice(
+      $._variable,
+      $._literal,
+      $.string,
+      $.true,
+      $.false,
+      $.nil,
+      alias($._endless_keyword_pair, $.pair),
+    ),
+
+    _endless_keyword_pair: $ => prec.right(seq(
+      field('key', choice(
+        $.hash_key_symbol,
+        alias($.identifier, $.hash_key_symbol),
+        alias($.constant, $.hash_key_symbol),
+        alias($.identifier_suffix, $.hash_key_symbol),
+        alias($.constant_suffix, $.hash_key_symbol),
+      )),
+      token.immediate(':'),
+      optional(field('value', $._endless_argument)),
+    )),
 
     parameters: $ => seq(
       '(',
@@ -281,7 +311,7 @@ module.exports = grammar({
 
     singleton_class: $ => seq(
       'class',
-      alias($._singleton_class_left_angle_left_langle, '<<'),
+      alias($._singleton_class_left_angle_left_angle, '<<'),
       field('value', $._arg),
       $._terminator,
       optional(field('body', $.body_statement)),
@@ -300,7 +330,7 @@ module.exports = grammar({
     yield_command: $ => prec.left(seq('yield', alias($.command_argument_list, $.argument_list))),
     break_command: $ => prec.left(seq('break', alias($.command_argument_list, $.argument_list))),
     next_command: $ => prec.left(seq('next', alias($.command_argument_list, $.argument_list))),
-    return: $ => prec.left(seq('return', optional($.argument_list))),
+    return: $ => prec.left(seq('return', optional(alias($._return_argument_list, $.argument_list)))),
     yield: $ => prec.left(seq('yield', optional($.argument_list))),
     break: $ => prec.left(seq('break', optional($.argument_list))),
     next: $ => prec.left(seq('next', optional($.argument_list))),
@@ -910,7 +940,7 @@ module.exports = grammar({
         [prec.left, PREC.BOOLEAN_AND, '&&'],
         [prec.left, PREC.SHIFT, choice('<<', '>>')],
         [prec.left, PREC.COMPARISON, choice('<', '<=', '>', '>=')],
-        [prec.left, PREC.BITWISE_AND, '&'],
+        [prec.left, PREC.BITWISE_AND, alias($._bitwise_and, '&')],
         [prec.left, PREC.BITWISE_OR, choice('^', '|')],
         [prec.left, PREC.ADDITIVE, choice('+', alias($._binary_minus, '-'))],
         [prec.left, PREC.MULTIPLICATIVE, choice('/', '%', alias($._binary_star, '*'))],
@@ -1057,14 +1087,18 @@ module.exports = grammar({
     comment: _ => token(prec(PREC.COMMENT, choice(
       seq('#', /.*/),
       seq(
-        /=begin.*\r?\n/,
+        /=begin[^\r\n]*\r?\n/,
         repeat(choice(
-          /[^=]/,
-          /=[^e]/,
-          /=e[^n]/,
-          /=en[^d]/,
+          /[^=\r\n][^\r\n]*\r?\n/,
+          /\r?\n/,
+          /=\r?\n/,
+          /=e\r?\n/,
+          /=en\r?\n/,
+          /=[^e\r\n][^\r\n]*\r?\n/,
+          /=e[^n\r\n][^\r\n]*\r?\n/,
+          /=en[^d\r\n][^\r\n]*\r?\n/,
         )),
-        /[\s*]*=end.*/,
+        /=end[^\r\n]*/,
       ),
     ))),
 
@@ -1229,6 +1263,13 @@ module.exports = grammar({
       $._line_break,
       ';',
     ),
+
+    _return_argument_list: $ => seq(
+      token.immediate('('),
+      optional($._arg),
+      ')',
+    ),
+
   },
 });
 
