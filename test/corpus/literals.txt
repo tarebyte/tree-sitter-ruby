@@ -1751,6 +1751,75 @@ log some_config
     (argument_list
       (identifier))))
 
+========================================
+heredoc nested in an interpolated heredoc body
+========================================
+
+puts <<HERE
+  hello #{<<HERE}
+  world
+HERE
+HERE
+
+---
+
+(program
+  (call
+    (identifier)
+    (argument_list
+      (heredoc_beginning)))
+  (heredoc_body
+    (heredoc_content)
+    (interpolation
+      (heredoc_beginning))
+    (heredoc_content)
+    (heredoc_body
+      (heredoc_content)
+      (heredoc_end))
+    (heredoc_content)
+    (heredoc_end)))
+
+========================================
+several heredocs nested in one heredoc body
+========================================
+
+x = <<A
+  p #{<<B} q #{<<C}
+  bb
+B
+  cc
+C
+A
+p x
+
+---
+
+(program
+  (assignment
+    (identifier)
+    (heredoc_beginning))
+  (heredoc_body
+    (heredoc_content)
+    (interpolation
+      (heredoc_beginning))
+    (heredoc_content)
+    (interpolation
+      (heredoc_beginning))
+    (heredoc_content)
+    (heredoc_body
+      (heredoc_content)
+      (heredoc_end))
+    (heredoc_content)
+    (heredoc_body
+      (heredoc_content)
+      (heredoc_end))
+    (heredoc_content)
+    (heredoc_end))
+  (call
+    (identifier)
+    (argument_list
+      (identifier))))
+
 ==================
 backticks subshell
 ==================

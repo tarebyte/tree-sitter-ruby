@@ -67,6 +67,10 @@ typedef struct {
     bool end_word_indentation_allowed;
     bool allows_interpolation;
     bool started;
+    // How many heredoc bodies were already being scanned when this one was
+    // opened. Ruby suspends the innermost of those at the next line break to read
+    // this body, so it may only start once exactly that many are active again.
+    uint8_t open_depth;
 } Heredoc;
 
 typedef struct {
@@ -118,12 +122,13 @@ static inline unsigned serialize(Scanner *scanner, char *buffer) {
     buffer[size++] = (char)scanner->open_heredocs.size;
     for (uint32_t i = 0; i < scanner->open_heredocs.size; i++) {
         Heredoc *heredoc = array_get(&scanner->open_heredocs, i);
-        if (size + 3 + sizeof(uint32_t) + heredoc->word.size >= TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
+        if (size + 4 + sizeof(uint32_t) + heredoc->word.size >= TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
             return 0;
         }
         buffer[size++] = (char)heredoc->end_word_indentation_allowed;
         buffer[size++] = (char)heredoc->allows_interpolation;
         buffer[size++] = (char)heredoc->started;
+        buffer[size++] = (char)heredoc->open_depth;
         memcpy(&buffer[size], &heredoc->word.size, sizeof(uint32_t));
         size += sizeof(uint32_t);
         memcpy(&buffer[size], heredoc->word.contents, heredoc->word.size);
@@ -159,6 +164,7 @@ static inline void deserialize(Scanner *scanner, const char *buffer, unsigned le
         heredoc.end_word_indentation_allowed = buffer[size++];
         heredoc.allows_interpolation = buffer[size++];
         heredoc.started = buffer[size++];
+        heredoc.open_depth = (uint8_t)buffer[size++];
 
         heredoc.word = (String)array_new();
         uint32_t word_length;
@@ -174,9 +180,32 @@ static inline void deserialize(Scanner *scanner, const char *buffer, unsigned le
     assert(size == length);
 }
 
+// `open_heredocs` keeps the heredocs whose bodies have started first, innermost
+// last, followed by those still waiting for a body. This returns the boundary
+// between the two, which is both the index of the next pending heredoc and the
+// number of started ones.
+static inline uint32_t heredoc_pending_index(const Scanner *scanner) {
+    uint32_t index = 0;
+    while (index < scanner->open_heredocs.size && scanner->open_heredocs.contents[index].started) {
+        index++;
+    }
+    return index;
+}
+
+// True when the next pending heredoc must suspend the body currently being
+// scanned rather than wait for it to finish. A heredoc opened inside an outer
+// body must not interrupt a sibling that is already running, so it waits until
+// the nesting depth matches the one it was opened at.
+static inline bool heredoc_nested_pending(const Scanner *scanner) {
+    uint32_t pending = heredoc_pending_index(scanner);
+    return pending > 0 && pending < scanner->open_heredocs.size &&
+           scanner->open_heredocs.contents[pending].open_depth == pending;
+}
+
 static inline bool scan_whitespace(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
-    bool heredoc_body_start_is_valid = scanner->open_heredocs.size > 0 && !scanner->open_heredocs.contents[0].started &&
-                                       valid_symbols[HEREDOC_BODY_START];
+    uint32_t pending_heredoc = heredoc_pending_index(scanner);
+    bool heredoc_body_start_is_valid =
+        pending_heredoc < scanner->open_heredocs.size && valid_symbols[HEREDOC_BODY_START];
     bool crossed_newline = false;
 
     for (;;) {
@@ -194,7 +223,7 @@ static inline bool scan_whitespace(Scanner *scanner, TSLexer *lexer, const bool 
             case '\r':
                 if (heredoc_body_start_is_valid) {
                     lexer->result_symbol = HEREDOC_BODY_START;
-                    scanner->open_heredocs.contents[0].started = true;
+                    scanner->open_heredocs.contents[pending_heredoc].started = true;
                     return true;
                 } else {
                     skip(scanner, lexer);
@@ -203,7 +232,7 @@ static inline bool scan_whitespace(Scanner *scanner, TSLexer *lexer, const bool 
             case '\n':
                 if (heredoc_body_start_is_valid) {
                     lexer->result_symbol = HEREDOC_BODY_START;
-                    scanner->open_heredocs.contents[0].started = true;
+                    scanner->open_heredocs.contents[pending_heredoc].started = true;
                     return true;
                 } else if (!valid_symbols[NO_LINE_BREAK] && valid_symbols[LINE_BREAK] && !crossed_newline) {
                     lexer->mark_end(lexer);
@@ -648,13 +677,9 @@ static inline void scan_heredoc_word(TSLexer *lexer, Heredoc *heredoc) {
 }
 
 static inline void enqueue_heredoc(Scanner *scanner, Heredoc heredoc) {
-    // Nested heredocs precede the active outer body, but pending heredocs remain FIFO.
-    for (uint32_t i = 0; i < scanner->open_heredocs.size; i++) {
-        if (scanner->open_heredocs.contents[i].started) {
-            array_insert(&scanner->open_heredocs, i, heredoc);
-            return;
-        }
-    }
+    // Pending heredocs are read in the order they were opened. One opened while
+    // a body is already being scanned additionally suspends that body.
+    heredoc.open_depth = (uint8_t)heredoc_pending_index(scanner);
     array_push(&scanner->open_heredocs, heredoc);
 }
 
@@ -696,7 +721,10 @@ static inline bool scan_short_interpolation(TSLexer *lexer, const bool has_conte
 }
 
 static inline bool scan_heredoc_content(Scanner *scanner, TSLexer *lexer) {
-    Heredoc *heredoc = array_get(&scanner->open_heredocs, 0);
+    // The body being scanned is the innermost started heredoc, which sits
+    // immediately before the pending queue.
+    uint32_t active = heredoc_pending_index(scanner) - 1;
+    Heredoc *heredoc = array_get(&scanner->open_heredocs, active);
     size_t position_in_word = 0;
     bool look_for_heredoc_end = true;
     bool has_content = false;
@@ -714,7 +742,7 @@ static inline bool scan_heredoc_content(Scanner *scanner, TSLexer *lexer) {
                     lexer->result_symbol = HEREDOC_CONTENT;
                 } else {
                     array_delete(&heredoc->word);
-                    array_erase(&scanner->open_heredocs, 0);
+                    array_erase(&scanner->open_heredocs, active);
                     lexer->result_symbol = HEREDOC_BODY_END;
                 }
                 return true;
@@ -729,7 +757,7 @@ static inline bool scan_heredoc_content(Scanner *scanner, TSLexer *lexer) {
                 lexer->result_symbol = HEREDOC_CONTENT;
             } else {
                 array_delete(&heredoc->word);
-                array_erase(&scanner->open_heredocs, 0);
+                array_erase(&scanner->open_heredocs, active);
                 lexer->result_symbol = HEREDOC_BODY_END;
             }
             return true;
@@ -773,6 +801,11 @@ static inline bool scan_heredoc_content(Scanner *scanner, TSLexer *lexer) {
                     advance(lexer);
                 }
                 has_content = true;
+                if (heredoc_nested_pending(scanner)) {
+                    lexer->mark_end(lexer);
+                    lexer->result_symbol = HEREDOC_CONTENT;
+                    return true;
+                }
                 look_for_heredoc_end = true;
                 while (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
                     advance(lexer);
@@ -946,12 +979,22 @@ static inline bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symb
         return true;
     }
 
+    // A heredoc opened inside a running body takes the line that follows, so its
+    // own body starts here rather than after the enclosing terminator.
+    if (valid_symbols[HEREDOC_BODY_START] && heredoc_nested_pending(scanner) &&
+        lexer->get_column(lexer) == 0) {
+        scanner->open_heredocs.contents[heredoc_pending_index(scanner)].started = true;
+        lexer->result_symbol = HEREDOC_BODY_START;
+        return true;
+    }
+
     // Contents of literals, which match any character except for some close delimiter
     if (!valid_symbols[STRING_START]) {
         if ((valid_symbols[STRING_CONTENT] || valid_symbols[STRING_END]) && scanner->literal_stack.size > 0) {
             return scan_literal_content(scanner, lexer);
         }
-        if ((valid_symbols[HEREDOC_CONTENT] || valid_symbols[HEREDOC_BODY_END]) && scanner->open_heredocs.size > 0) {
+        if ((valid_symbols[HEREDOC_CONTENT] || valid_symbols[HEREDOC_BODY_END]) &&
+            heredoc_pending_index(scanner) > 0) {
             return scan_heredoc_content(scanner, lexer);
         }
     }
