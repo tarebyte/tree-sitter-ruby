@@ -1,5 +1,31 @@
 ; Method definitions
 
+; A Sorbet `sig` block sits between a method's doc comment and its definition, so
+; the comment is not adjacent to the definition and the general pattern below
+; cannot attach it. Anchoring adjacency on the `sig` call instead recovers the
+; doc comment. This must precede the general pattern: when several patterns match
+; the same node, tree-sitter-tags keeps the one from the earliest pattern.
+(
+  (comment)* @doc
+  .
+  (call
+    method: (identifier) @reference.call
+    block: [
+      (block)
+      (do_block)
+    ])
+  .
+  [
+    (method
+      name: (_) @name) @definition.method
+    (singleton_method
+      name: (_) @name) @definition.method
+  ]
+  (#eq? @reference.call "sig")
+  (#strip! @doc "^#\\s*")
+  (#select-adjacent! @doc @reference.call)
+)
+
 (
   (comment)* @doc
   .
