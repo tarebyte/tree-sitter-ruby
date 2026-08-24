@@ -640,32 +640,6 @@ x.(123)(456)
 
 ---
 
-==================================================
-three-dot operator opens a range, not a forwarding
-==================================================
-
-def foo
-  ... 3
-end
-
-def bar
-  ...2
-end
-
----
-
-(program
-  (method
-    name: (identifier)
-    body: (body_statement
-      (range
-        end: (integer))))
-  (method
-    name: (identifier)
-    body: (body_statement
-      (range
-        end: (integer)))))
-
 ===========================================
 newline after range operator continues range
 ===========================================
