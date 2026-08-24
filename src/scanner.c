@@ -888,6 +888,12 @@ static inline bool scan_comment(TSLexer *lexer) {
         advance(lexer);
     }
 
+    // `=begin` only opens a block comment when the keyword ends the token, so
+    // identifiers such as `=beginning` must not be treated as a comment opener.
+    if (!lexer->eof(lexer) && !iswspace(lexer->lookahead)) {
+        return false;
+    }
+
     while (!lexer->eof(lexer) && lexer->lookahead != '\r' && lexer->lookahead != '\n') {
         advance(lexer);
     }

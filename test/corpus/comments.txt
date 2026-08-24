@@ -172,3 +172,23 @@ comment
 ---
 
 (program (comment))
+
+========================================
+block comment opener requires a boundary
+========================================
+
+=beginning
+class Later
+end
+=end
+
+---
+
+(program
+  (ERROR)
+  (identifier)
+  (class
+    name: (constant))
+  (assignment
+    left: (MISSING identifier)
+    right: (identifier)))

@@ -238,6 +238,107 @@ def keyword_command = puts x: 1
           key: (hash_key_symbol)
           value: (integer))))))
 
+====================================================
+endless method command bodies take full arguments
+====================================================
+
+def array_arg = puts []
+def float_arg = puts 1.5
+def regex_arg = puts /x/
+def ivar_arg = puts @x
+def range_arg = puts 1..2
+def binary_arg = puts 1 + 2
+def call_arg = puts x.y
+def splat_arg = puts *a
+def words_arg = puts %w[a]
+def kwarg_array = puts key: []
+def nested_command = puts bar 1
+
+---
+
+(program
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (array))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (float))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (regex
+          (string_content)))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (instance_variable))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (range
+          begin: (integer)
+          end: (integer)))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (binary
+          left: (integer)
+          right: (integer)))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (call
+          receiver: (identifier)
+          method: (identifier)))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (splat_argument
+          (identifier)))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (string_array
+          (bare_string
+            (string_content))))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (pair
+          key: (hash_key_symbol)
+          value: (array)))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (call
+          method: (identifier)
+          arguments: (argument_list
+            (integer)))))))
+
 =============================================
 invalid nested command call in endless method
 =============================================
@@ -991,3 +1092,57 @@ bar
 ---
 
 (program (identifier) (end_block (identifier)) (identifier))
+
+===================================
+lambda parameters with block-locals
+===================================
+
+->(a; b) { b }
+->(; a) { }
+->(a, b; c, d) { }
+
+---
+
+(program
+  (lambda
+    parameters: (lambda_parameters
+      (identifier)
+      locals: (identifier))
+    body: (block
+      body: (block_body
+        (identifier))))
+  (lambda
+    parameters: (lambda_parameters
+      locals: (identifier))
+    body: (block))
+  (lambda
+    parameters: (lambda_parameters
+      (identifier)
+      (identifier)
+      locals: (identifier)
+      locals: (identifier))
+    body: (block)))
+
+===========================
+unary operator method names
+===========================
+
+def !@
+  true
+end
+
+def ~@
+  true
+end
+
+---
+
+(program
+  (method
+    name: (operator)
+    body: (body_statement
+      (true)))
+  (method
+    name: (operator)
+    body: (body_statement
+      (true))))

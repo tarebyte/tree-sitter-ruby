@@ -676,14 +676,6 @@
           "named": true
         },
         {
-          "type": "constant",
-          "named": true
-        },
-        {
-          "type": "delimited_symbol",
-          "named": true
-        },
-        {
           "type": "forward_argument",
           "named": true
         },
@@ -692,27 +684,11 @@
           "named": true
         },
         {
-          "type": "identifier",
-          "named": true
-        },
-        {
-          "type": "integer",
-          "named": true
-        },
-        {
           "type": "pair",
           "named": true
         },
         {
-          "type": "simple_symbol",
-          "named": true
-        },
-        {
           "type": "splat_argument",
-          "named": true
-        },
-        {
-          "type": "string",
           "named": true
         }
       ]
@@ -2326,7 +2302,18 @@
   {
     "type": "lambda_parameters",
     "named": true,
-    "fields": {},
+    "fields": {
+      "locals": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
       "multiple": true,
       "required": false,
@@ -2715,26 +2702,6 @@
         "types": [
           {
             "type": "_arg",
-            "named": true
-          },
-          {
-            "type": "constant",
-            "named": true
-          },
-          {
-            "type": "identifier",
-            "named": true
-          },
-          {
-            "type": "integer",
-            "named": true
-          },
-          {
-            "type": "simple_symbol",
-            "named": true
-          },
-          {
-            "type": "string",
             "named": true
           }
         ]
@@ -3672,6 +3639,10 @@
   },
   {
     "type": "!=",
+    "named": false
+  },
+  {
+    "type": "!@",
     "named": false
   },
   {

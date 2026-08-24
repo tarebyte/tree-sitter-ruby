@@ -790,37 +790,28 @@ module.exports = grammar({
       field('arguments', alias($._endless_method_command_argument_list, $.argument_list)),
     ),
 
-    _endless_method_command_argument_list: $ => prec.right(seq(
-      $._endless_method_command_argument,
-      repeat(seq(',', $._endless_method_command_argument)),
+    // parse.y models an endless method body as `endless_command : command`, so the
+    // argument list here mirrors `call_args`: its elements are `arg`s rather than the
+    // broader `expr`s accepted by `command_argument_list`. Keeping the element rule at
+    // `_arg` matches Ruby (an endless body cannot contain a bare `and`/`or`/`in`) and
+    // keeps the enclosing `def` from being reinterpreted as a call receiver.
+    _endless_method_command_argument_list: $ => prec.right(choice(
+      // `call_args : value_expr(command)` - a lone nested command call, as in
+      // `def f = puts bar 1`.
+      alias($._endless_method_command_call, $.call),
+      seq(
+        $._endless_method_command_argument,
+        repeat(seq(',', $._endless_method_command_argument)),
+      ),
     )),
 
-    _endless_method_command_argument: $ => choice(
-      $.identifier,
-      $.constant,
-      $.integer,
-      $.string,
-      $.simple_symbol,
-      $.delimited_symbol,
-      alias($._endless_method_keyword_argument, $.pair),
-    ),
-
-    _endless_method_keyword_argument: $ => prec.right(seq(
-      field('key', choice(
-        $.hash_key_symbol,
-        alias($.identifier, $.hash_key_symbol),
-        alias($.constant, $.hash_key_symbol),
-        alias($.identifier_suffix, $.hash_key_symbol),
-        alias($.constant_suffix, $.hash_key_symbol),
-      )),
-      token.immediate(':'),
-      field('value', choice(
-        $.identifier,
-        $.constant,
-        $.integer,
-        $.string,
-        $.simple_symbol,
-      )),
+    _endless_method_command_argument: $ => prec.left(choice(
+      $._arg,
+      $.splat_argument,
+      $.hash_splat_argument,
+      $.forward_argument,
+      $.block_argument,
+      $.pair,
     )),
 
     command_call_with_block: $ => {
@@ -1103,7 +1094,7 @@ module.exports = grammar({
 
     operator: _ => choice(
       '..', '|', '^', '&', '<=>', '==', '===', '=~', '>', '>=', '<', '<=', '+', '!=',
-      '-', '*', '/', '%', '!', '!~', '**', '<<', '>>', '~', '+@', '-@', '~@', '[]', '[]=', '`',
+      '-', '*', '/', '%', '!', '!~', '**', '<<', '>>', '~', '+@', '-@', '~@', '!@', '[]', '[]=', '`',
     ),
 
     _method_name: $ => choice(
@@ -1287,10 +1278,20 @@ module.exports = grammar({
     lambda: $ => seq(
       '->',
       field('parameters', optional(choice(
-        alias($.parameters, $.lambda_parameters),
+        alias($._lambda_paren_parameters, $.lambda_parameters),
         alias($._lambda_bare_parameters, $.lambda_parameters),
       ))),
       field('body', choice($.block, $.do_block)),
+    ),
+
+    // `f_larglist : '(' f_largs opt_bv_decl ')'` - unlike a method's parameter
+    // list, a lambda's parenthesized list accepts block-local declarations,
+    // e.g. `->(a; b) { }`.
+    _lambda_paren_parameters: $ => seq(
+      '(',
+      commaSep($._formal_parameter),
+      optional(seq(';', sep1(field('locals', $.identifier), ','))),
+      ')',
     ),
 
     _lambda_bare_parameters: $ => seq(
