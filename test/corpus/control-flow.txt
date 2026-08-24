@@ -598,7 +598,7 @@ return
 (program (return))
 
 ==============================================================
-omitted keyword argument before rescue: incorrectly parsed
+omitted keyword argument before rescue on the next line
 ==============================================================
 
 begin
@@ -614,13 +614,12 @@ end
     (assignment
       (identifier)
       (integer))
-    (rescue_modifier
-      (call
-        (identifier)
-        (argument_list
-          (pair (hash_key_symbol))))
-      (ERROR)
-      (identifier))))
+    (call
+      (identifier)
+      (argument_list
+        (pair (hash_key_symbol))))
+    (rescue
+      (exception_variable (identifier)))))
 
 ==========================================
 omitted keyword argument before rescue
@@ -641,6 +640,131 @@ begin; key = 10; foo key:; rescue => e; end
         (pair (hash_key_symbol))))
     (rescue
       (exception_variable (identifier)))))
+
+==============================================================
+omitted keyword arguments before rescue clauses
+==============================================================
+
+begin
+  foo key:
+rescue
+  bar key:, other:
+rescue ArgumentError => e
+  baz other:
+end
+
+def m
+  foo key:
+rescue => e
+end
+
+class C
+  foo key:
+rescue => e
+end
+
+---
+
+(program
+  (begin
+    (call
+      (identifier)
+      (argument_list
+        (pair (hash_key_symbol))))
+    (rescue
+      (then
+        (call
+          (identifier)
+          (argument_list
+            (pair (hash_key_symbol))
+            (pair (hash_key_symbol))))))
+    (rescue
+      (exceptions (constant))
+      (exception_variable (identifier))
+      (then
+        (call
+          (identifier)
+          (argument_list
+            (pair (hash_key_symbol)))))))
+  (method
+    (identifier)
+    (body_statement
+      (call
+        (identifier)
+        (argument_list
+          (pair (hash_key_symbol))))
+      (rescue
+        (exception_variable (identifier)))))
+  (class
+    (constant)
+    (body_statement
+      (call
+        (identifier)
+        (argument_list
+          (pair (hash_key_symbol))))
+      (rescue
+        (exception_variable (identifier))))))
+
+==============================================================
+omitted keyword argument value on the next line
+==============================================================
+
+foo key:
+  bar
+
+begin
+  foo key:
+    bar
+rescue => e
+end
+
+---
+
+(program
+  (call
+    (identifier)
+    (argument_list
+      (pair (hash_key_symbol) (identifier))))
+  (begin
+    (call
+      (identifier)
+      (argument_list
+        (pair (hash_key_symbol) (identifier))))
+    (rescue
+      (exception_variable (identifier)))))
+
+==============================================================
+omitted keyword argument value starting with the letter r
+==============================================================
+
+foo key:
+  rescue_handler
+foo key:
+  reload!
+foo key:
+  r
+foo key:
+  Regexp
+
+---
+
+(program
+  (call
+    (identifier)
+    (argument_list
+      (pair (hash_key_symbol) (identifier))))
+  (call
+    (identifier)
+    (argument_list
+      (pair (hash_key_symbol) (call (identifier)))))
+  (call
+    (identifier)
+    (argument_list
+      (pair (hash_key_symbol) (identifier))))
+  (call
+    (identifier)
+    (argument_list
+      (pair (hash_key_symbol) (constant)))))
 
 ====
 case
