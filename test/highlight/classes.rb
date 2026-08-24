@@ -22,12 +22,12 @@ class Car < Vehicle
   end
 
   private
-  # ^ keyword
+  # ^ function.method.builtin
 
   public
-  # ^ keyword
+  # ^ function.method.builtin
 
   protected
-  # ^ keyword
+  # ^ function.method.builtin
 end
 # <- keyword
