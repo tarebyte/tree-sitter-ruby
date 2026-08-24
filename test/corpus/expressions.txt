@@ -1966,6 +1966,100 @@ end
           body: (body_statement
             (identifier)))))))
 
+======================================================
+chained method calls after a command call with a block
+======================================================
+
+foo bar do |x|
+  x
+end.each(&:sort)
+
+foo bar do |x|
+  x
+end.map(&:to_s).join(", ")
+
+foo bar do |x|
+  x
+end.each(1, 2) { |y| y }
+
+foo bar do |x|
+  x
+end.each do |y|
+  y
+end
+
+---
+
+(program
+  (call
+    receiver: (call
+      method: (identifier)
+      arguments: (argument_list
+        (identifier))
+      block: (do_block
+        parameters: (block_parameters
+          (identifier))
+        body: (body_statement
+          (identifier))))
+    method: (identifier)
+    arguments: (argument_list
+      (block_argument
+        (simple_symbol))))
+  (call
+    receiver: (call
+      receiver: (call
+        method: (identifier)
+        arguments: (argument_list
+          (identifier))
+        block: (do_block
+          parameters: (block_parameters
+            (identifier))
+          body: (body_statement
+            (identifier))))
+      method: (identifier)
+      arguments: (argument_list
+        (block_argument
+          (simple_symbol))))
+    method: (identifier)
+    arguments: (argument_list
+      (string
+        (string_content))))
+  (call
+    receiver: (call
+      method: (identifier)
+      arguments: (argument_list
+        (identifier))
+      block: (do_block
+        parameters: (block_parameters
+          (identifier))
+        body: (body_statement
+          (identifier))))
+    method: (identifier)
+    arguments: (argument_list
+      (integer)
+      (integer))
+    block: (block
+      parameters: (block_parameters
+        (identifier))
+      body: (block_body
+        (identifier))))
+  (call
+    receiver: (call
+      method: (identifier)
+      arguments: (argument_list
+        (identifier))
+      block: (do_block
+        parameters: (block_parameters
+          (identifier))
+        body: (body_statement
+          (identifier))))
+    method: (identifier)
+    block: (do_block
+      parameters: (block_parameters
+        (identifier))
+      body: (body_statement
+        (identifier)))))
+
 ===============================
 method calls in binary expression
 ===============================

@@ -676,6 +676,7 @@ module.exports = grammar({
       alias($.command_call, $.call),
       alias($.command_call_with_block, $.call),
       prec.left(alias($._chained_command_call, $.call)),
+      prec.left(alias($._chained_command_call_with_arguments, $.call)),
       alias($.return_command, $.return),
       alias($.yield_command, $.yield),
       alias($.break_command, $.break),
@@ -828,11 +829,36 @@ module.exports = grammar({
       );
     },
 
+    // A command call carrying a block (`foo bar do ... end`) is not a `_primary`, so a
+    // call chained off one cannot be expressed through `_call`/`call`. The three rules
+    // below mirror that pair for such receivers: `_chained_command_call` is the bare
+    // chain, `_chained_command_call_with_arguments` adds a parenthesized argument list
+    // and/or a block, and `_command_call_with_block_chain` lets either of them act as
+    // the receiver of a further chained call.
     _chained_command_call: $ => seq(
-      field('receiver', alias($.command_call_with_block, $.call)),
+      field('receiver', $._command_call_with_block_chain),
       field('operator', $._call_operator),
       field('method', choice($.identifier, $._function_identifier, $.operator, $.constant)),
     ),
+
+    _command_call_with_block_chain: $ => choice(
+      alias($.command_call_with_block, $.call),
+      alias($._chained_command_call, $.call),
+      alias($._chained_command_call_with_arguments, $.call),
+    ),
+
+    _chained_command_call_with_arguments: $ => {
+      const receiverArguments = seq($._chained_command_call, field('arguments', $.argument_list));
+      const block = field('block', $.block);
+      const doBlock = field('block', $.do_block);
+      return choice(
+        receiverArguments,
+        prec(PREC.CURLY_BLOCK, seq(receiverArguments, block)),
+        prec(PREC.DO_BLOCK, seq(receiverArguments, doBlock)),
+        prec(PREC.CURLY_BLOCK, seq($._chained_command_call, block)),
+        prec(PREC.DO_BLOCK, seq($._chained_command_call, doBlock)),
+      );
+    },
 
     call: $ => {
       const receiver = choice(
