@@ -93,6 +93,75 @@ multi-line block comments with almost end
 
 (program (comment))
 
+=================================================
+block comment terminator must start at line start
+=================================================
+
+=begin
+hello
+world =end
+  =end
+=end
+after
+
+---
+
+(program
+  (comment)
+  (identifier))
+
+==========================================
+block comment terminator requires boundary
+==========================================
+
+=begin
+=endish
+=end
+after
+
+---
+
+(program
+  (comment)
+  (identifier))
+
+=======================================
+comment within method-call continuation
+=======================================
+
+receiver
+# comment
+.method
+
+---
+
+(program
+  (call
+    receiver: (identifier)
+    (comment)
+    method: (identifier)))
+
+================================================
+syntax error does not swallow later declarations
+================================================
+
+@
+class Later
+end
+
+def later
+end
+
+---
+
+(program
+  (ERROR
+    (UNEXPECTED '\n'))
+  (class
+    (constant))
+  (method
+    (identifier)))
+
 =========================
 block comment without newline after end
 =========================
@@ -103,3 +172,23 @@ comment
 ---
 
 (program (comment))
+
+========================================
+block comment opener requires a boundary
+========================================
+
+=beginning
+class Later
+end
+=end
+
+---
+
+(program
+  (ERROR)
+  (identifier)
+  (class
+    name: (constant))
+  (assignment
+    left: (MISSING identifier)
+    right: (identifier)))

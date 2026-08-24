@@ -1199,10 +1199,14 @@
     "fields": {},
     "children": {
       "multiple": true,
-      "required": true,
+      "required": false,
       "types": [
         {
           "type": "_statement",
+          "named": true
+        },
+        {
+          "type": "comment",
           "named": true
         },
         {
@@ -2226,6 +2230,10 @@
           {
             "type": "_arg",
             "named": true
+          },
+          {
+            "type": "call",
+            "named": true
           }
         ]
       }
@@ -2294,7 +2302,18 @@
   {
     "type": "lambda_parameters",
     "named": true,
-    "fields": {},
+    "fields": {
+      "locals": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
       "multiple": true,
       "required": false,
@@ -2401,6 +2420,10 @@
           },
           {
             "type": "body_statement",
+            "named": true
+          },
+          {
+            "type": "call",
             "named": true
           },
           {
@@ -2641,6 +2664,10 @@
         "types": [
           {
             "type": "_arg",
+            "named": true
+          },
+          {
+            "type": "call",
             "named": true
           }
         ]
@@ -3075,6 +3102,10 @@
           },
           {
             "type": "body_statement",
+            "named": true
+          },
+          {
+            "type": "call",
             "named": true
           },
           {
@@ -3608,6 +3639,10 @@
   },
   {
     "type": "!=",
+    "named": false
+  },
+  {
+    "type": "!@",
     "named": false
   },
   {

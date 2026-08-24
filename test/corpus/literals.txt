@@ -771,6 +771,7 @@ percent string with unbalanced delimiters
 %/a/
 %\a\
 %#a#
+%=a=
 
 ---
 
@@ -780,7 +781,65 @@ percent string with unbalanced delimiters
   (string
     (string_content))
   (string
+    (string_content))
+  (string
     (string_content)))
+
+===================================================
+percent equals string interpolation and assignment
+===================================================
+
+%=a#{b}c=
+value %= 2
+value%=3
+
+---
+
+(program
+  (string
+    (string_content)
+    (interpolation
+      (identifier))
+    (string_content))
+  (operator_assignment
+    (identifier)
+    (integer))
+  (operator_assignment
+    (identifier)
+    (integer)))
+
+=====================================
+percent literals as command arguments
+=====================================
+
+receiver.instance_eval %{
+  class B; end
+}
+parser.parse %w[--verbose --require optparse], into: options
+
+---
+
+(program
+  (call
+    (identifier)
+    (identifier)
+    (argument_list
+      (string
+        (string_content))))
+  (call
+    (identifier)
+    (identifier)
+    (argument_list
+      (string_array
+        (bare_string
+          (string_content))
+        (bare_string
+          (string_content))
+        (bare_string
+          (string_content)))
+      (pair
+        (hash_key_symbol)
+        (identifier)))))
 
 =========================================
 percent string with balanced delimiters
@@ -1487,7 +1546,6 @@ EOF
 <<-'EOF'
 This is \not\ an interpolation: #{foo}
 EOF
-
 ---
 
 (program
@@ -1503,6 +1561,264 @@ EOF
   (heredoc_body
     (heredoc_content)
     (heredoc_end)))
+
+========================================
+left shift without whitespace
+========================================
+
+"test"<<"ruby"
+r<<i
+EnumerableSpecs::EachDefiner.new([1], 2, 'a','b').inject {|r,i| r<<i}.should == [1, 2, 'a', 'b']
+
+---
+
+(program
+  (binary
+    (string
+      (string_content))
+    (string
+      (string_content)))
+  (binary
+    (identifier)
+    (identifier))
+  (binary
+    (call
+      (call
+        (call
+          (scope_resolution
+            (constant)
+            (constant))
+          (identifier)
+          (argument_list
+            (array
+              (integer))
+            (integer)
+            (string
+              (string_content))
+            (string
+              (string_content))))
+        (identifier)
+        (block
+          (block_parameters
+            (identifier)
+            (identifier))
+          (block_body
+            (binary
+              (identifier)
+              (identifier)))))
+      (identifier))
+    (array
+      (integer)
+      (integer)
+      (string
+        (string_content))
+      (string
+        (string_content)))))
+
+========================================
+heredocs after immediate expression delimiters
+========================================
+
+x=<<EOF
+assignment body
+EOF
+
+foo(<<EOF)
+argument body
+EOF
+
+---
+
+(program
+  (assignment
+    (identifier)
+    (heredoc_beginning))
+  (heredoc_body
+    (heredoc_content)
+    (heredoc_end))
+  (call
+    (identifier)
+    (argument_list
+      (heredoc_beginning)))
+  (heredoc_body
+    (heredoc_content)
+    (heredoc_end)))
+
+========================================
+nested heredoc in interpolation
+========================================
+
+output =
+  <<~ABC
+    Top
+    #{
+      <<~DEF
+        Middle
+      DEF
+    }
+    Bottom
+  ABC
+
+puts output
+
+---
+
+(program
+  (assignment
+    (identifier)
+    (heredoc_beginning))
+  (heredoc_body
+    (heredoc_content)
+    (interpolation
+      (heredoc_beginning)
+      (heredoc_body
+        (heredoc_content)
+        (heredoc_end)))
+    (heredoc_content)
+    (heredoc_end))
+  (call
+    (identifier)
+    (argument_list
+      (identifier))))
+
+========================================
+nested heredoc in interpolation block
+========================================
+
+some_hosts = ['192.168.1.56', '10.0.3.2']
+
+some_config = <<~CONFIG
+  #{some_hosts.map do |some_host|
+    <<~SSH_HOST
+      ---
+      kind: SSHHost
+      host: #{some_host}
+    SSH_HOST
+  end.join}
+CONFIG
+
+def log(data)
+  puts data
+end
+
+log some_config
+
+---
+
+(program
+  (assignment
+    (identifier)
+    (array
+      (string
+        (string_content))
+      (string
+        (string_content))))
+  (assignment
+    (identifier)
+    (heredoc_beginning))
+  (heredoc_body
+    (heredoc_content)
+    (interpolation
+      (call
+        (call
+          (identifier)
+          (identifier)
+          (do_block
+            (block_parameters
+              (identifier))
+            (body_statement
+              (heredoc_beginning)
+              (heredoc_body
+                (heredoc_content)
+                (interpolation
+                  (identifier))
+                (heredoc_content)
+                (heredoc_end)))))
+        (identifier)))
+    (heredoc_content)
+    (heredoc_end))
+  (method
+    (identifier)
+    (method_parameters
+      (identifier))
+    (body_statement
+      (call
+        (identifier)
+        (argument_list
+          (identifier)))))
+  (call
+    (identifier)
+    (argument_list
+      (identifier))))
+
+========================================
+heredoc nested in an interpolated heredoc body
+========================================
+
+puts <<HERE
+  hello #{<<HERE}
+  world
+HERE
+HERE
+
+---
+
+(program
+  (call
+    (identifier)
+    (argument_list
+      (heredoc_beginning)))
+  (heredoc_body
+    (heredoc_content)
+    (interpolation
+      (heredoc_beginning))
+    (heredoc_content)
+    (heredoc_body
+      (heredoc_content)
+      (heredoc_end))
+    (heredoc_content)
+    (heredoc_end)))
+
+========================================
+several heredocs nested in one heredoc body
+========================================
+
+x = <<A
+  p #{<<B} q #{<<C}
+  bb
+B
+  cc
+C
+A
+p x
+
+---
+
+(program
+  (assignment
+    (identifier)
+    (heredoc_beginning))
+  (heredoc_body
+    (heredoc_content)
+    (interpolation
+      (heredoc_beginning))
+    (heredoc_content)
+    (interpolation
+      (heredoc_beginning))
+    (heredoc_content)
+    (heredoc_body
+      (heredoc_content)
+      (heredoc_end))
+    (heredoc_content)
+    (heredoc_body
+      (heredoc_content)
+      (heredoc_end))
+    (heredoc_content)
+    (heredoc_end))
+  (call
+    (identifier)
+    (argument_list
+      (identifier))))
 
 ==================
 backticks subshell
@@ -2096,6 +2412,54 @@ regular expression with interpolation
   (regex
     (string_content)))
 
+=================================================
+regular expression escapes remain string content
+=================================================
+
+/\d+\w?\s/
+/[[:alpha:]\d]/
+/\d#{width}\w/
+%r{\d#{width}\w}
+
+---
+
+(program
+  (regex
+    (string_content))
+  (regex
+    (string_content))
+  (regex
+    (string_content)
+    (interpolation
+      (identifier))
+    (string_content))
+  (regex
+    (string_content)
+    (interpolation
+      (identifier))
+    (string_content)))
+
+==============================================
+interpolated string escapes remain escape nodes
+==============================================
+
+"\d#{value}\w"
+%Q{\d#{value}\w}
+
+---
+
+(program
+  (string
+    (escape_sequence)
+    (interpolation
+      (identifier))
+    (escape_sequence))
+  (string
+    (escape_sequence)
+    (interpolation
+      (identifier))
+    (escape_sequence)))
+
 =======================================================
 percent r regular expression with unbalanced delimiters
 =======================================================
@@ -2290,6 +2654,12 @@ Cß
 @äö
 @@äö
 :äö
+:言
+:你
+:일
+言
+@言
+@@言
 äö
 
 ---
@@ -2299,4 +2669,10 @@ Cß
   (instance_variable)
   (class_variable)
   (simple_symbol)
+  (simple_symbol)
+  (simple_symbol)
+  (simple_symbol)
+  (identifier)
+  (instance_variable)
+  (class_variable)
   (identifier))

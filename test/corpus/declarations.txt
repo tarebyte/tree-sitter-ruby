@@ -30,6 +30,130 @@ end
 
 (program (method (identifier) (body_statement (identifier))))
 
+==============================================
+method body with leading and internal comments
+==============================================
+
+def foo
+  # first leading comment
+  # second leading comment
+  first
+  # internal comment
+  second
+end
+
+---
+
+(program
+  (method
+    (identifier)
+    (body_statement
+      (comment)
+      (comment)
+      (identifier)
+      (comment)
+      (identifier))))
+
+========================
+comment-only method body
+========================
+
+def foo
+  # the whole body
+end
+
+---
+
+(program
+  (method
+    (identifier)
+    (body_statement
+      (comment))))
+
+=====================================
+same-line declaration header comments
+=====================================
+
+def foo # method header
+end
+
+def self.foo # singleton method header
+end
+
+class Foo # class header
+end
+
+class Foo < Bar # superclass header
+end
+
+class << self # singleton class header
+end
+
+module Foo # module header
+end
+
+---
+
+(program
+  (method
+    name: (identifier)
+    body: (body_statement
+      (comment)))
+  (singleton_method
+    object: (self)
+    name: (identifier)
+    body: (body_statement
+      (comment)))
+  (class
+    name: (constant)
+    body: (body_statement
+      (comment)))
+  (class
+    name: (constant)
+    superclass: (superclass
+      (constant))
+    (comment))
+  (singleton_class
+    value: (self)
+    (comment))
+  (module
+    name: (constant)
+    body: (body_statement
+      (comment))))
+
+==========================================
+method body comments with rescue and ensure
+==========================================
+
+def foo
+  # leading body comment
+  work
+rescue Error
+  # leading rescue comment
+  recover
+ensure
+  # leading ensure comment
+  cleanup
+end
+
+---
+
+(program
+  (method
+    (identifier)
+    (body_statement
+      (comment)
+      (identifier)
+      (rescue
+        (exceptions
+          (constant))
+        (comment)
+        (then
+          (identifier)))
+      (ensure
+        (comment)
+        (identifier)))))
+
 =====================
 "end"-less method
 =====================
@@ -56,6 +180,181 @@ def foo() = bar rescue (print "error")
     )
   )
 )
+
+================================
+endless method with command call
+================================
+
+def foo() = raise NotImplementedError
+def greet(person) = "Hi, ".dup.concat person
+def string_command = puts "x"
+def multiple_command = puts 1, 2
+def symbol_command = puts :x
+def keyword_command = puts x: 1
+
+---
+
+(program
+  (method
+    name: (identifier)
+    parameters: (method_parameters)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list (constant))))
+  (method
+    name: (identifier)
+    parameters: (method_parameters (identifier))
+    body: (call
+      receiver: (call
+        receiver: (string (string_content))
+        method: (identifier))
+      method: (identifier)
+      arguments: (argument_list (identifier))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (string (string_content)))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (integer)
+        (integer))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (simple_symbol))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (pair
+          key: (hash_key_symbol)
+          value: (integer))))))
+
+====================================================
+endless method command bodies take full arguments
+====================================================
+
+def array_arg = puts []
+def float_arg = puts 1.5
+def regex_arg = puts /x/
+def ivar_arg = puts @x
+def range_arg = puts 1..2
+def binary_arg = puts 1 + 2
+def call_arg = puts x.y
+def splat_arg = puts *a
+def words_arg = puts %w[a]
+def kwarg_array = puts key: []
+def nested_command = puts bar 1
+
+---
+
+(program
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (array))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (float))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (regex
+          (string_content)))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (instance_variable))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (range
+          begin: (integer)
+          end: (integer)))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (binary
+          left: (integer)
+          right: (integer)))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (call
+          receiver: (identifier)
+          method: (identifier)))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (splat_argument
+          (identifier)))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (string_array
+          (bare_string
+            (string_content))))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (pair
+          key: (hash_key_symbol)
+          value: (array)))))
+  (method
+    name: (identifier)
+    body: (call
+      method: (identifier)
+      arguments: (argument_list
+        (call
+          method: (identifier)
+          arguments: (argument_list
+            (integer)))))))
+
+=============================================
+invalid nested command call in endless method
+=============================================
+
+def foo() = 1 + raise NotImplementedError
+
+---
+
+(program
+  (method
+    name: (identifier)
+    parameters: (method_parameters)
+    body: (binary
+      left: (integer)
+      (ERROR (identifier))
+      right: (constant))))
 
 ===========================
 method as attribute setter
@@ -494,6 +793,44 @@ end
 
 (program (class (constant) (body_statement (method (identifier)))))
 
+=============================================
+class body with leading and internal comments
+=============================================
+
+class Foo
+  # leading class comment
+  first
+  # internal class comment
+  second
+end
+
+---
+
+(program
+  (class
+    (constant)
+    (body_statement
+      (comment)
+      (identifier)
+      (comment)
+      (identifier))))
+
+=======================
+comment-only class body
+=======================
+
+class Foo
+  # the whole body
+end
+
+---
+
+(program
+  (class
+    (constant)
+    (body_statement
+      (comment))))
+
 ====================
 class with operators
 ====================
@@ -580,6 +917,42 @@ end
 ---
 
 (program (module (constant) (body_statement (method (identifier)))))
+
+==========================================
+module body with multiple leading comments
+==========================================
+
+module Foo
+  # first leading comment
+  # second leading comment
+  value
+end
+
+---
+
+(program
+  (module
+    (constant)
+    (body_statement
+      (comment)
+      (comment)
+      (identifier))))
+
+========================
+comment-only module body
+========================
+
+module Foo
+  # the whole body
+end
+
+---
+
+(program
+  (module
+    (constant)
+    (body_statement
+      (comment))))
 
 ========================
 module without semicolon
@@ -719,3 +1092,57 @@ bar
 ---
 
 (program (identifier) (end_block (identifier)) (identifier))
+
+===================================
+lambda parameters with block-locals
+===================================
+
+->(a; b) { b }
+->(; a) { }
+->(a, b; c, d) { }
+
+---
+
+(program
+  (lambda
+    parameters: (lambda_parameters
+      (identifier)
+      locals: (identifier))
+    body: (block
+      body: (block_body
+        (identifier))))
+  (lambda
+    parameters: (lambda_parameters
+      locals: (identifier))
+    body: (block))
+  (lambda
+    parameters: (lambda_parameters
+      (identifier)
+      (identifier)
+      locals: (identifier)
+      locals: (identifier))
+    body: (block)))
+
+===========================
+unary operator method names
+===========================
+
+def !@
+  true
+end
+
+def ~@
+  true
+end
+
+---
+
+(program
+  (method
+    name: (operator)
+    body: (body_statement
+      (true)))
+  (method
+    name: (operator)
+    body: (body_statement
+      (true))))

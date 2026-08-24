@@ -551,6 +551,42 @@ return foo
 
 (program (return (argument_list (identifier))))
 
+================================
+return with parenthesized values
+================================
+
+return(1)
+return()
+return (1)
+return ()
+return 1, 2
+
+---
+
+(program
+  (return (argument_list (integer)))
+  (return (argument_list))
+  (return (argument_list (parenthesized_statements (integer))))
+  (return (argument_list (parenthesized_statements)))
+  (return (argument_list (integer) (integer))))
+
+===============================================
+return with parenthesized multiple values
+===============================================
+
+def f; return(1,2); end
+
+---
+
+(program
+  (method
+    (identifier)
+    (body_statement
+      (return
+        (argument_list
+          (integer)
+          (ERROR (integer)))))))
+
 ====================
 return without value
 ====================
@@ -560,6 +596,51 @@ return
 ---
 
 (program (return))
+
+==============================================================
+omitted keyword argument before rescue: incorrectly parsed
+==============================================================
+
+begin
+  key = 10
+  foo key:
+rescue => e
+end
+
+---
+
+(program
+  (begin
+    (assignment
+      (identifier)
+      (integer))
+    (rescue_modifier
+      (call
+        (identifier)
+        (argument_list
+          (pair (hash_key_symbol))))
+      (ERROR)
+      (identifier))))
+
+==========================================
+omitted keyword argument before rescue
+==========================================
+
+begin; key = 10; foo key:; rescue => e; end
+
+---
+
+(program
+  (begin
+    (assignment
+      (identifier)
+      (integer))
+    (call
+      (identifier)
+      (argument_list
+        (pair (hash_key_symbol))))
+    (rescue
+      (exception_variable (identifier)))))
 
 ====
 case
