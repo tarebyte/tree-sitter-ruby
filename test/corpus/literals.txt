@@ -1531,6 +1531,25 @@ un-terminated heredocs
     (heredoc_content)
     (heredoc_end)))
 
+==========================================
+un-terminated heredoc identifier does not crash the scanner
+==========================================
+
+<<~"BASH
+  if the string inside is too short it doesn't crash
+  but I haven't found exactly how many chars is the problem
+
+  if the string inside is too short it doesn't crash
+  but I haven't found exactly how many chars is the problem
+
+  it needs this line
+BASH
+
+---
+
+(program
+  (heredoc_beginning))
+
 =================================
 no interpolation or escape sequences in single quoted heredoc
 =================================
