@@ -33,8 +33,10 @@
   "yield"
 ] @keyword
 
-((identifier) @keyword
- (#match? @keyword "^(private|protected|public)$"))
+; `private`, `protected` and `public` are `Module` instance methods, not
+; keywords: they can be called with arguments, passed a `def`, or shadowed.
+((identifier) @function.method.builtin
+ (#match? @function.method.builtin "^(private|protected|public)$"))
 
 (constant) @constructor
 
