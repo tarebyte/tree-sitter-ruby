@@ -28,3 +28,4 @@ cc = "1.1"
 
 [dev-dependencies]
 tree-sitter = "0.26.13"
+tree-sitter-tags = "0.26.13"
