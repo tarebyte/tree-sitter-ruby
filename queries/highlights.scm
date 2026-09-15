@@ -34,9 +34,11 @@
 ] @keyword
 
 ; `private`, `protected` and `public` are `Module` instance methods, not
-; keywords: they can be called with arguments, passed a `def`, or shadowed.
+; keywords. Bare, they parse as a plain identifier; `#is-not? local` keeps a
+; local variable that shadows one of them from being highlighted as a call.
 ((identifier) @function.method.builtin
- (#match? @function.method.builtin "^(private|protected|public)$"))
+ (#match? @function.method.builtin "^(private|protected|public)$")
+ (#is-not? local))
 
 (constant) @constructor
 
@@ -49,6 +51,15 @@
 
 ((identifier) @function.method.builtin
  (#eq? @function.method.builtin "require"))
+
+; The argument forms, such as `private :foo` and `private def bar; end`, have to
+; come after the general call pattern above to take precedence over it.
+; `!receiver` keeps an unrelated method that happens to share the name, as in
+; `acl.public`, highlighted as an ordinary call.
+((call
+   !receiver
+   method: (identifier) @function.method.builtin)
+ (#match? @function.method.builtin "^(private|protected|public)$"))
 
 ; Function definitions
 
