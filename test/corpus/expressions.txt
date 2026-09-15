@@ -613,6 +613,33 @@ a...b
     (identifier)
     (identifier)))
 
+=================================
+dot call syntax
+=================================
+
+x.(123)
+x.()
+
+---
+
+(program
+  (call
+    receiver: (identifier)
+    arguments: (argument_list
+      (integer)))
+  (call
+    receiver: (identifier)
+    arguments: (argument_list)))
+
+===================================================
+dot call syntax rejects a second argument list
+:error
+===================================================
+
+x.(123)(456)
+
+---
+
 ===========================================
 newline after range operator continues range
 ===========================================

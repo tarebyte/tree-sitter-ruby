@@ -138,6 +138,11 @@ static inline unsigned serialize(Scanner *scanner, char *buffer) {
     return size;
 }
 
+// The serialized state comes back from the caller, which may hand over a buffer
+// that a previous (or corrupted) run produced. Every read is bounds-checked and
+// any inconsistency drops the scanner back to its empty state rather than
+// restoring garbage: an over-long word length would otherwise read past the
+// buffer, and a truncated record would leave a half-built heredoc on the stack.
 static inline void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
     unsigned size = 0;
     scanner->has_leading_whitespace = false;
@@ -147,10 +152,19 @@ static inline void deserialize(Scanner *scanner, const char *buffer, unsigned le
         return;
     }
 
-    uint8_t literal_depth = buffer[size++];
+    uint8_t literal_depth = (uint8_t)buffer[size++];
+    if (length - size < (unsigned)literal_depth * 5) {
+        reset(scanner);
+        return;
+    }
     for (unsigned j = 0; j < literal_depth; j++) {
         Literal literal = {0};
-        literal.type = (TokenType)(buffer[size++]);
+        uint8_t literal_type = (uint8_t)buffer[size++];
+        if (literal_type > NONE) {
+            reset(scanner);
+            return;
+        }
+        literal.type = (TokenType)literal_type;
         literal.open_delimiter = (unsigned char)buffer[size++];
         literal.close_delimiter = (unsigned char)buffer[size++];
         literal.nesting_depth = (unsigned char)buffer[size++];
@@ -158,26 +172,45 @@ static inline void deserialize(Scanner *scanner, const char *buffer, unsigned le
         array_push(&scanner->literal_stack, literal);
     }
 
-    uint8_t open_heredoc_count = buffer[size++];
+    if (size == length) {
+        reset(scanner);
+        return;
+    }
+
+    uint8_t open_heredoc_count = (uint8_t)buffer[size++];
     for (unsigned j = 0; j < open_heredoc_count; j++) {
+        if (length - size < 4 + sizeof(uint32_t)) {
+            reset(scanner);
+            return;
+        }
+
         Heredoc heredoc = {0};
         heredoc.end_word_indentation_allowed = buffer[size++];
         heredoc.allows_interpolation = buffer[size++];
         heredoc.started = buffer[size++];
         heredoc.open_depth = (uint8_t)buffer[size++];
 
-        heredoc.word = (String)array_new();
         uint32_t word_length;
         memcpy(&word_length, &buffer[size], sizeof(uint32_t));
         size += sizeof(uint32_t);
-        array_reserve(&heredoc.word, word_length);
-        memcpy(heredoc.word.contents, &buffer[size], word_length);
+        if (length - size < word_length) {
+            reset(scanner);
+            return;
+        }
+
+        heredoc.word = (String)array_new();
+        if (word_length > 0) {
+            array_reserve(&heredoc.word, word_length);
+            memcpy(heredoc.word.contents, &buffer[size], word_length);
+        }
         heredoc.word.size = word_length;
         size += word_length;
         array_push(&scanner->open_heredocs, heredoc);
     }
 
-    assert(size == length);
+    if (size != length) {
+        reset(scanner);
+    }
 }
 
 // `open_heredocs` keeps the heredocs whose bodies have started first, innermost
