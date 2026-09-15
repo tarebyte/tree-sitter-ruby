@@ -75,6 +75,10 @@ typedef struct {
 
 typedef struct {
     bool has_leading_whitespace;
+    // Set while scanning whitespace when a newline was crossed but the parser
+    // asked for line breaks to be withheld, because the construct on the
+    // previous line may still be continued by the next one.
+    bool withheld_line_break;
     Array(Literal) literal_stack;
     Array(Heredoc) open_heredocs;
 } Scanner;
@@ -141,6 +145,7 @@ static inline unsigned serialize(Scanner *scanner, char *buffer) {
 static inline void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
     unsigned size = 0;
     scanner->has_leading_whitespace = false;
+    scanner->withheld_line_break = false;
     reset(scanner);
 
     if (length == 0) {
@@ -208,6 +213,8 @@ static inline bool scan_whitespace(Scanner *scanner, TSLexer *lexer, const bool 
         pending_heredoc < scanner->open_heredocs.size && valid_symbols[HEREDOC_BODY_START];
     bool crossed_newline = false;
 
+    scanner->withheld_line_break = false;
+
     for (;;) {
         if (!valid_symbols[NO_LINE_BREAK] && valid_symbols[LINE_BREAK] && lexer->is_at_included_range_start(lexer)) {
             lexer->mark_end(lexer);
@@ -239,6 +246,9 @@ static inline bool scan_whitespace(Scanner *scanner, TSLexer *lexer, const bool 
                     skip(scanner, lexer);
                     crossed_newline = true;
                 } else {
+                    if (valid_symbols[NO_LINE_BREAK] && valid_symbols[LINE_BREAK]) {
+                        scanner->withheld_line_break = true;
+                    }
                     skip(scanner, lexer);
                 }
                 break;
@@ -967,6 +977,58 @@ static inline bool scan_comment(TSLexer *lexer) {
     return false;
 }
 
+// Scans an identifier that is only interesting to this scanner because of the
+// character that follows it: `foo:` is a hash key, and `foo!` is an identifier
+// whose trailing `!` must not be mistaken for the start of `!=`. The first
+// character may already have been consumed by the caller.
+static inline bool scan_identifier_token(TSLexer *lexer, const bool *valid_symbols, TokenType identifier_symbol) {
+    while (iswalnum(lexer->lookahead) || lexer->lookahead == '_') {
+        advance(lexer);
+    }
+
+    if (valid_symbols[HASH_KEY_SYMBOL] && lexer->lookahead == ':') {
+        lexer->mark_end(lexer);
+        advance(lexer);
+        if (lexer->lookahead != ':') {
+            lexer->result_symbol = HASH_KEY_SYMBOL;
+            return true;
+        }
+    } else if (valid_symbols[identifier_symbol] && lexer->lookahead == '!') {
+        advance(lexer);
+        if (lexer->lookahead != '=') {
+            lexer->mark_end(lexer);
+            lexer->result_symbol = identifier_symbol;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// Line breaks are withheld while a construct may still be continued on the next
+// line, as in `foo key:`, whose value is allowed to appear there. The `rescue`
+// keyword can never continue such a construct, so a line break is produced
+// before it. Without one, `rescue` is taken as a rescue modifier attached to the
+// previous line instead of the rescue clause of the enclosing body.
+static inline bool scan_line_break_before_rescue(TSLexer *lexer, const bool *valid_symbols) {
+    lexer->mark_end(lexer);
+
+    for (const char *c = "rescue"; *c != '\0'; c++) {
+        if (lexer->lookahead != *c) {
+            return scan_identifier_token(lexer, valid_symbols, IDENTIFIER_SUFFIX);
+        }
+        advance(lexer);
+    }
+
+    if (iswalnum(lexer->lookahead) || lexer->lookahead == '_' || lexer->lookahead == '!' ||
+        lexer->lookahead == '?' || lexer->lookahead == ':') {
+        return scan_identifier_token(lexer, valid_symbols, IDENTIFIER_SUFFIX);
+    }
+
+    lexer->result_symbol = LINE_BREAK;
+    return true;
+}
+
 static inline bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     scanner->has_leading_whitespace = false;
 
@@ -1010,6 +1072,10 @@ static inline bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symb
 
     if (valid_symbols[COMMENT] && scan_comment(lexer)) {
         return true;
+    }
+
+    if (scanner->withheld_line_break && lexer->lookahead == 'r') {
+        return scan_line_break_before_rescue(lexer, valid_symbols);
     }
 
     switch (lexer->lookahead) {
@@ -1252,26 +1318,7 @@ static inline bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symb
          (iswalpha(lexer->lookahead) || lexer->lookahead == '_')) ||
         (valid_symbols[CONSTANT_SUFFIX] && iswupper(lexer->lookahead))) {
         TokenType validIdentifierSymbol = iswupper(lexer->lookahead) ? CONSTANT_SUFFIX : IDENTIFIER_SUFFIX;
-        while (iswalnum(lexer->lookahead) || lexer->lookahead == '_') {
-            advance(lexer);
-        }
-
-        if (valid_symbols[HASH_KEY_SYMBOL] && lexer->lookahead == ':') {
-            lexer->mark_end(lexer);
-            advance(lexer);
-            if (lexer->lookahead != ':') {
-                lexer->result_symbol = HASH_KEY_SYMBOL;
-                return true;
-            }
-        } else if (valid_symbols[validIdentifierSymbol] && lexer->lookahead == '!') {
-            advance(lexer);
-            if (lexer->lookahead != '=') {
-                lexer->result_symbol = validIdentifierSymbol;
-                return true;
-            }
-        }
-
-        return false;
+        return scan_identifier_token(lexer, valid_symbols, validIdentifierSymbol);
     }
 
     // Open delimiters for literals
